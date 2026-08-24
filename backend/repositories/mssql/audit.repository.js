@@ -11,8 +11,8 @@ class AuditRepository {
         .input('user_agent', sql.VarChar, logEntry.userAgent)
         .input('details', sql.VarChar, logEntry.details || null)
         .query(`
-          INSERT INTO AuditLogs (user_id, action, ip_address, user_agent, details)
-          VALUES (@user_id, @action, @ip_address, @user_agent, @details)
+          INSERT INTO AuditLogs (user_id, action, ip_address, user_agent, details, timestamp)
+          VALUES (@user_id, @action, @ip_address, @user_agent, @details, GETUTCDATE())
         `);
     } catch (err) {
       // We don't want audit log failures to crash the whole request, but we must log it

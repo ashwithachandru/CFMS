@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Users, Building2, Layers, Clock, Moon, Sun, Plus, Search, Edit2, ShieldAlert,
-  Key, UserCheck, UserX, AlertTriangle, CheckCircle2, RefreshCw, Trash2, X
+  Key, UserCheck, UserX, AlertTriangle, CheckCircle2, RefreshCw, Trash2, X, ShieldCheck
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import AccessControl from '../components/AccessControl';
 
 const Settings = ({ initialTab = 'users' }) => {
   const { user } = useAuth();

@@ -97,106 +97,247 @@ const Reports = () => {
   };
 
   // Excel Export Handler
+  const singlePagePdfRef = useRef(null);
+
+  const getExportPayload = () => {
+    if (!reportData) return null;
+
+    let title = '';
+    let periodText = period === 'today' ? 'Today'
+      : period === 'week' ? 'This Week'
+      : period === 'month' ? 'This Month'
+      : period === 'all' ? 'All Time'
+      : `${startDate} to ${endDate}`;
+
+    let kpiList = [];
+    let highlight = '';
+    let statusList = [];
+    let categoryList = [];
+    let roleTable = null;
+
+    // Status Breakdown
+    if (reportData.statusBreakdown && Array.isArray(reportData.statusBreakdown)) {
+      const totalCount = reportData.statusBreakdown.reduce((sum, item) => {
+        const val = item.count !== undefined ? item.count : (item.value !== undefined ? item.value : 0);
+        return sum + val;
+      }, 0);
+
+      const colorMap = {
+        'Pending': '#F59E0B',
+        'Assigned': '#3B82F6',
+        'In Progress': '#8B5CF6',
+        'Escalated': '#EF4444',
+        'Escalated to Manager': '#EF4444',
+        'Escalated to Warehouse Head': '#DC2626',
+        'Resolved': '#10B981',
+        'Completed': '#10B981',
+        'Closed': '#6B7280'
+      };
+
+      statusList = reportData.statusBreakdown.map(item => {
+        const name = item.name || item.status || 'Unknown';
+        const count = item.count !== undefined ? item.count : (item.value !== undefined ? item.value : 0);
+        const pct = totalCount > 0 ? Math.round((count / totalCount) * 100) : (item.percentage ? Math.round(item.percentage) : 0);
+        return {
+          name,
+          count,
+          pct,
+          color: colorMap[name] || '#6366F1'
+        };
+      });
+    }
+
+    // Category Breakdown (Subtype / Type)
+    if (reportData.subtypeBreakdown && Array.isArray(reportData.subtypeBreakdown)) {
+      categoryList = reportData.subtypeBreakdown.map(item => ({
+        name: item.subtypeName || item.typeName || item.name || 'General',
+        count: item.count !== undefined ? item.count : (item.value !== undefined ? item.value : 0)
+      }));
+    } else if (reportData.typeBreakdown && Array.isArray(reportData.typeBreakdown)) {
+      categoryList = reportData.typeBreakdown.map(item => ({
+        name: item.subtypeName ? `${item.typeName} (${item.subtypeName})` : (item.typeName || item.name || 'General'),
+        count: item.count !== undefined ? item.count : (item.value !== undefined ? item.value : 0)
+      }));
+    }
+
+    if (role === 'Sales Executive') {
+      const s = reportData.summary || {};
+      title = `${user?.name || 'Sales Executive'} — Performance Summary`;
+      highlight = reportData.mostCommonIssue ? `Most Common Issue: ${reportData.mostCommonIssue}` : 'No recurring issue pattern detected';
+
+      kpiList = [
+        { label: 'Total Raised', value: s.totalRaised || 0, subtext: 'Complaints filed', color: '#2563EB', borderColor: '#BFDBFE' },
+        { label: 'Resolved', value: s.resolvedCount || 0, subtext: 'Successfully resolved', color: '#16A34A', borderColor: '#BBF7D0' },
+        { label: 'Open Escalated', value: s.escalatedCount || 0, subtext: 'Currently open escalated', color: '#DC2626', borderColor: '#FECACA' },
+        { label: 'SLA Compliance', value: `${s.slaComplianceRate || 0}%`, subtext: 'On-time resolution rate', color: '#059669', borderColor: '#A7F3D0' },
+        { label: 'Avg Resolution', value: `${s.avgResolutionHours || 0}h`, subtext: 'Average resolution time', color: '#D97706', borderColor: '#FDE68A' }
+      ];
+
+      if (reportData.volumeTrend && reportData.volumeTrend.length > 0) {
+        roleTable = {
+          title: 'Recent Complaint Volume Trend',
+          headers: ['Date / Period', 'Volume'],
+          rows: reportData.volumeTrend.slice(-5).map(v => [v.date || v.label, `${v.count} complaints`])
+        };
+      }
+    } else if (role === 'Warehouse Team') {
+      const ps = reportData.personalSummary || {};
+      const ws = reportData.warehouseSummary || {};
+      title = `${ws.warehouseName || user?.warehouse_name || 'Warehouse'} — Team Member Summary (${user?.name || 'Member'})`;
+      highlight = reportData.mostCommonIssue ? `Most Common Issue: ${reportData.mostCommonIssue}` : 'No recurring issue pattern detected';
+
+      kpiList = [
+        { label: 'Handled', value: ps.handledCount || 0, subtext: 'Claimed complaints', color: '#2563EB', borderColor: '#BFDBFE' },
+        { label: 'Completed', value: ps.completedCount || 0, subtext: 'Resolved by member', color: '#16A34A', borderColor: '#BBF7D0' },
+        { label: 'Open Escalated', value: ps.escalatedCount || 0, subtext: 'Currently open escalated', color: '#DC2626', borderColor: '#FECACA' },
+        { label: 'SLA Compliance', value: `${ps.slaComplianceRate || 0}%`, subtext: 'On-time completion', color: '#059669', borderColor: '#A7F3D0' },
+        { label: 'Avg Completion', value: `${ps.avgCompletionHours || 0}h`, subtext: 'Average resolution time', color: '#D97706', borderColor: '#FDE68A' }
+      ];
+
+      roleTable = {
+        title: 'Warehouse-Wide Overview',
+        headers: ['Warehouse Metric', 'Value'],
+        rows: [
+          ['Total Warehouse Complaints', `${ws.totalWarehouseComplaints || 0}`],
+          ['Resolved Directly by Team', `${ws.resolvedDirectlyByTeam || 0}`],
+          ['Escalated to Manager', `${ws.escalatedToManager || 0}`]
+        ]
+      };
+    } else if (role === 'Warehouse Manager' || role === 'Manager') {
+      const s = reportData.summary || {};
+      title = `${s.warehouseName || user?.warehouse_name || 'Warehouse'} — Executive Escalation Summary`;
+      highlight = reportData.mostCommonIssue ? `Most Common Issue: ${reportData.mostCommonIssue}` : 'No recurring issue pattern detected';
+
+      kpiList = [
+        { label: 'Total Complaints', value: s.totalComplaints || 0, subtext: 'Total warehouse volume', color: '#2563EB', borderColor: '#BFDBFE' },
+        { label: 'Resolved', value: s.resolvedCount || 0, subtext: 'Resolved complaints', color: '#16A34A', borderColor: '#BBF7D0' },
+        { label: 'Escalated (Open)', value: s.totalEscalated || s.pendingCount || 0, subtext: 'Requiring manager action', color: '#DC2626', borderColor: '#FECACA' },
+        { label: 'Escalation Rate', value: `${s.escalationRate || 0}%`, subtext: 'Pct ever escalated', color: '#7C3AED', borderColor: '#DDD6FE' },
+        { label: 'SLA Performance', value: `${s.slaPerformanceRate || 0}%`, subtext: 'Overall SLA compliance', color: '#059669', borderColor: '#A7F3D0' },
+        { label: 'Avg Manager Time', value: `${s.avgEscalatedResolutionHours || 0}h`, subtext: 'Manager resolution time', color: '#D97706', borderColor: '#FDE68A' }
+      ];
+
+      if (reportData.teamMemberPerformance && reportData.teamMemberPerformance.length > 0) {
+        roleTable = {
+          title: 'Team Member Performance Comparison',
+          headers: ['Team Member', 'Handled', 'Completed', 'Escalated', 'Pending', 'SLA %'],
+          rows: reportData.teamMemberPerformance.slice(0, 5).map(m => [
+            m.memberName,
+            `${m.handledCount || 0}`,
+            `${m.completedCount || 0}`,
+            `${m.escalatedCount || 0}`,
+            `${m.pendingCount || 0}`,
+            m.slaPerformance || '100%'
+          ])
+        };
+      }
+    } else {
+      // Administrator / Admin
+      const s = reportData.summary || {};
+      title = 'Organization-Wide Executive Summary';
+
+      const topWh = reportData.warehouseComparison?.reduce((best, curr) => 
+        (curr.slaPerformance > (best?.slaPerformance || -1) ? curr : best), null);
+
+      highlight = topWh 
+        ? `Top Performing Warehouse: ${topWh.warehouseName} (${topWh.slaPerformance}% SLA Performance)`
+        : `Most Common Issue: ${s.mostCommonIssue || 'N/A'}`;
+
+      kpiList = [
+        { label: 'Org Complaints', value: s.totalComplaints || 0, subtext: 'Org-wide volume', color: '#2563EB', borderColor: '#BFDBFE' },
+        { label: 'Open Escalated', value: s.currentlyEscalated || 0, subtext: 'Currently open escalated', color: '#DC2626', borderColor: '#FECACA' },
+        { label: 'Resolved', value: s.resolvedCount || 0, subtext: 'Org-wide resolved', color: '#16A34A', borderColor: '#BBF7D0' },
+        { label: 'Active Escalation %', value: `${s.activeEscalationRate || s.escalationRate || 0}%`, subtext: 'Open escalated pct', color: '#7C3AED', borderColor: '#DDD6FE' },
+        { label: 'Org SLA Compliance', value: `${s.slaPerformanceRate || 0}%`, subtext: 'Org-wide SLA score', color: '#059669', borderColor: '#A7F3D0' },
+        { label: 'Avg Resolution', value: s.avgResolutionDisplay || `${s.avgEscalatedResolutionHours || 0}h`, subtext: 'Avg resolution time', color: '#D97706', borderColor: '#FDE68A' }
+      ];
+
+      if (reportData.warehouseComparison && reportData.warehouseComparison.length > 0) {
+        roleTable = {
+          title: 'Warehouse Performance Comparison Summary',
+          headers: ['Warehouse Name', 'Total', 'Resolved', 'Open Escalated', 'Pending', 'SLA %'],
+          rows: reportData.warehouseComparison.slice(0, 5).map(w => [
+            w.warehouseName,
+            `${w.totalComplaints ?? w.total ?? 0}`,
+            `${w.resolvedCount ?? w.resolved ?? 0}`,
+            `${w.currentlyEscalatedCount ?? w.escalatedCount ?? w.openEscalated ?? 0}`,
+            `${w.pendingCount ?? w.pending ?? 0}`,
+            w.slaPerformance || '100%'
+          ])
+        };
+      }
+    }
+
+    return { title, periodText, kpiList, highlight, statusList, categoryList, roleTable };
+  };
+
+  // Excel Export Handler (Single Page Summary Spreadsheet)
   const handleExportExcel = () => {
     if (!reportData) return;
     setExportingExcel(true);
 
     try {
+      const payload = getExportPayload();
+      if (!payload) return;
+
       const wb = XLSX.utils.book_new();
 
-      // Sheet 1: Summary
       const summaryRows = [
-        ['CFMS AUTOMATED REPORT SUMMARY'],
-        ['User Role', role],
-        ['Generated At', new Date().toLocaleString()],
-        ['Date Range Filter', period.toUpperCase() + (period === 'custom' ? ` (${startDate} to ${endDate})` : '')],
-        []
+        ['CFMS 1-PAGE EXECUTIVE SUMMARY REPORT'],
+        ['Report Scope:', payload.title],
+        ['Date Range Filter:', payload.periodText],
+        ['Generated On:', new Date().toLocaleString()],
+        ['Generated By User:', `${user?.name || 'User'} (${role})`],
+        [],
+        ['KEY PERFORMANCE INDICATORS'],
+        ['Metric', 'Value', 'Details']
       ];
 
-      if (role === 'Sales Executive' && reportData.summary) {
-        summaryRows.push(['Metric', 'Value']);
-        summaryRows.push(['Total Complaints Raised', reportData.summary.totalRaised]);
-        summaryRows.push(['Pending Complaints', reportData.summary.pendingCount]);
-        summaryRows.push(['In Progress Complaints', reportData.summary.inProgressCount]);
-        summaryRows.push(['Resolved Complaints', reportData.summary.resolvedCount]);
-        summaryRows.push(['Escalated Complaints', reportData.summary.escalatedCount]);
-        summaryRows.push(['Average Resolution Time (Hours)', reportData.summary.avgResolutionHours]);
-        summaryRows.push(['SLA Compliance Rate (%)', `${reportData.summary.slaComplianceRate}%`]);
-      } else if (role === 'Warehouse Team' && reportData.personalSummary) {
-        summaryRows.push(['Personal Metrics', 'Value']);
-        summaryRows.push(['Complaints Handled', reportData.personalSummary.handledCount]);
-        summaryRows.push(['Pending', reportData.personalSummary.pendingCount]);
-        summaryRows.push(['In Progress', reportData.personalSummary.inProgressCount]);
-        summaryRows.push(['Completed', reportData.personalSummary.completedCount]);
-        summaryRows.push(['Escalated', reportData.personalSummary.escalatedCount]);
-        summaryRows.push(['Average Completion Time (Hours)', reportData.personalSummary.avgCompletionHours]);
-        summaryRows.push(['SLA Compliance Rate (%)', `${reportData.personalSummary.slaComplianceRate}%`]);
+      payload.kpiList.forEach(kpi => {
+        summaryRows.push([kpi.label, kpi.value, kpi.subtext]);
+      });
+
+      summaryRows.push([]);
+      summaryRows.push(['EXECUTIVE HIGHLIGHTS']);
+      summaryRows.push(['Highlight:', payload.highlight]);
+      summaryRows.push([]);
+
+      summaryRows.push(['STATUS DISTRIBUTION']);
+      summaryRows.push(['Status Name', 'Complaint Count', 'Percentage']);
+      payload.statusList.forEach(st => {
+        summaryRows.push([st.name, st.count, `${st.pct}%`]);
+      });
+
+      if (payload.categoryList && payload.categoryList.length > 0) {
         summaryRows.push([]);
-        summaryRows.push(['Warehouse-Wide Summary', 'Value']);
-        summaryRows.push(['Total Warehouse Complaints', reportData.warehouseSummary.totalWarehouseComplaints]);
-        summaryRows.push(['Resolved Directly by Team', reportData.warehouseSummary.resolvedDirectlyByTeam]);
-        summaryRows.push(['Escalated to Manager', reportData.warehouseSummary.escalatedToManager]);
-      } else if ((role === 'Warehouse Manager' || role === 'Administrator' || role === 'Admin') && reportData.summary) {
-        summaryRows.push(['Warehouse Escalation Metrics', 'Value']);
-        summaryRows.push(['Total Warehouse Complaints', reportData.summary.totalComplaints]);
-        summaryRows.push(['Pending Complaints', reportData.summary.pendingCount]);
-        summaryRows.push(['In Progress Complaints', reportData.summary.inProgressCount]);
-        summaryRows.push(['Resolved Complaints', reportData.summary.resolvedCount]);
-        summaryRows.push(['Escalated Complaints', reportData.summary.totalEscalated]);
-        summaryRows.push(['Escalation Rate (%)', `${reportData.summary.escalationRate}%`]);
-        summaryRows.push(['Average Manager Resolution Time (Hours)', reportData.summary.avgEscalatedResolutionHours]);
-        summaryRows.push(['SLA Performance Rate (%)', `${reportData.summary.slaPerformanceRate}%`]);
+        summaryRows.push(['TOP COMPLAINT CATEGORIES']);
+        summaryRows.push(['Category / Subtype Name', 'Complaint Count']);
+        payload.categoryList.slice(0, 6).forEach(cat => {
+          summaryRows.push([cat.name, cat.count]);
+        });
+      }
+
+      if (payload.roleTable) {
+        summaryRows.push([]);
+        summaryRows.push([payload.roleTable.title.toUpperCase()]);
+        summaryRows.push(payload.roleTable.headers);
+        payload.roleTable.rows.forEach(r => summaryRows.push(r));
       }
 
       const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
-      XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
 
-      // Sheet 2: Complaint Type Breakdown
-      if (reportData.typeBreakdown && reportData.typeBreakdown.length > 0) {
-        const typeRows = reportData.typeBreakdown.map(item => ({
-          'Complaint Type': item.typeName,
-          'Subtype': item.subtypeName,
-          'Count': item.count
-        }));
-        const wsType = XLSX.utils.json_to_sheet(typeRows);
-        XLSX.utils.book_append_sheet(wb, wsType, 'Type Breakdown');
-      }
+      wsSummary['!cols'] = [
+        { wch: 35 },
+        { wch: 22 },
+        { wch: 30 },
+        { wch: 18 },
+        { wch: 18 },
+        { wch: 18 }
+      ];
 
-      // Sheet 3: Team Comparison (Warehouse Manager)
-      if (reportData.teamMemberPerformance && reportData.teamMemberPerformance.length > 0) {
-        const teamRows = reportData.teamMemberPerformance.map(item => ({
-          'Team Member': item.memberName,
-          'Complaints Handled': item.handledCount,
-          'Completed': item.completedCount,
-          'Escalated': item.escalatedCount,
-          'Pending': item.pendingCount,
-          'Avg Resolution Time (hrs)': item.avgResolutionHours,
-          'SLA Performance': item.slaPerformance
-        }));
-        const wsTeam = XLSX.utils.json_to_sheet(teamRows);
-        XLSX.utils.book_append_sheet(wb, wsTeam, 'Team Comparison');
-      }
+      XLSX.utils.book_append_sheet(wb, wsSummary, 'Executive Summary');
 
-      // Sheet 4: Detailed Complaint Data
-      if (reportData.detailedComplaints && reportData.detailedComplaints.length > 0) {
-        const detailedRows = reportData.detailedComplaints.map(item => ({
-          'Complaint ID': item.complaint_number,
-          'Customer Code': item.customer_code,
-          'Invoice Number': item.invoice_number,
-          'Type': item.type,
-          'Subtype': item.subtype,
-          'Raised By': item.raisedBy || 'N/A',
-          'Claimed By': item.claimedBy || 'N/A',
-          'Warehouse': item.warehouse_name || 'N/A',
-          'Raised Date': item.raised_date,
-          'Status': item.status,
-          'Resolved Date': item.resolved_date
-        }));
-        const wsDetailed = XLSX.utils.json_to_sheet(detailedRows);
-        XLSX.utils.book_append_sheet(wb, wsDetailed, 'Detailed Complaint Data');
-      }
-
-      const fileName = `${role.replace(/\s+/g, '_')}_Report_${period}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      const fileName = `${role.replace(/\s+/g, '_')}_Executive_Summary_${period}_${new Date().toISOString().slice(0, 10)}.xlsx`;
       XLSX.writeFile(wb, fileName);
     } catch (err) {
       console.error('Excel Export Error:', err);
@@ -206,40 +347,37 @@ const Reports = () => {
     }
   };
 
-  // PDF Export Handler
+  // PDF Export Handler (Single Page Executive Document)
   const handleExportPdf = async () => {
-    if (!reportRef.current) return;
+    if (!reportData || !singlePagePdfRef.current) return;
     setExportingPdf(true);
 
     try {
-      const element = reportRef.current;
+      const element = singlePagePdfRef.current;
       const canvas = await html2canvas(element, {
-        scale: 2,
+        scale: 1.5,
         useCORS: true,
-        backgroundColor: isDarkMode ? '#111827' : '#FFFFFF',
+        backgroundColor: '#FFFFFF',
         logging: false
       });
 
-      const imgData = canvas.toDataURL('image/png');
+      const imgData = canvas.toDataURL('image/jpeg', 0.85);
       const pdf = new jsPDF('p', 'mm', 'a4');
       const imgWidth = 210;
-      const pageHeight = 297;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = 0;
+      const imgHeight = 297; // Exactly fit A4 height
 
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
+      pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
 
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-      }
-
-      const fileName = `${role.replace(/\s+/g, '_')}_Report_${period}_${new Date().toISOString().slice(0, 10)}.pdf`;
-      pdf.save(fileName);
+      const fileName = `${role.replace(/\s+/g, '_')}_Executive_Summary_${period}_${new Date().toISOString().slice(0, 10)}.pdf`;
+      const pdfBlob = pdf.output('blob');
+      const blobUrl = URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
     } catch (err) {
       console.error('PDF Export Error:', err);
       alert('Failed to export PDF: ' + err.message);
@@ -1138,13 +1276,13 @@ const Reports = () => {
                   {/* Subtype Analysis */}
                   <ChartCard title="Org-Wide Subtype Analysis">
                     {reportData.subtypeBreakdown && reportData.subtypeBreakdown.length > 0 ? (
-                      <ResponsiveContainer width="100%" height={260}>
-                        <BarChart data={reportData.subtypeBreakdown} margin={{ bottom: 25, top: 10 }}>
+                      <ResponsiveContainer width="100%" height={270}>
+                        <BarChart data={reportData.subtypeBreakdown} layout="vertical" margin={{ left: 5, right: 15 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke={chartGridColor} />
-                          <XAxis dataKey="subtypeName" stroke={chartTextColor} fontSize={10} interval={0} angle={-20} textAnchor="end" height={45} />
-                          <YAxis stroke={chartTextColor} fontSize={11} allowDecimals={false} />
+                          <XAxis type="number" stroke={chartTextColor} fontSize={11} allowDecimals={false} />
+                          <YAxis dataKey="subtypeName" type="category" stroke={chartTextColor} fontSize={10} width={145} interval={0} />
                           <Tooltip contentStyle={{ backgroundColor: chartTooltipBg, borderColor: chartTooltipBorder, borderRadius: '8px' }} />
-                          <Bar dataKey="count" name="Count" fill="var(--brand-primary)" radius={[4, 4, 0, 0]} barSize={16} />
+                          <Bar dataKey="count" name="Count" fill="var(--brand-primary)" radius={[0, 4, 4, 0]} barSize={12} />
                         </BarChart>
                       </ResponsiveContainer>
                     ) : <EmptyStateText message="No subtype data for selected date range" />}
@@ -1250,6 +1388,149 @@ const Reports = () => {
           </>
         )}
       </div>
+
+      {/* Hidden Single-Page Executive Summary Container for PDF Export */}
+      {reportData && (() => {
+        const exportPayload = getExportPayload();
+        if (!exportPayload) return null;
+        return (
+          <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -9999, opacity: 0.01, pointerEvents: 'none' }}>
+            <div
+              ref={singlePagePdfRef}
+              style={{
+                width: '800px',
+                height: '1130px',
+                padding: '32px 36px',
+                boxSizing: 'border-box',
+                backgroundColor: '#FFFFFF',
+                color: '#1E293B',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+                display: 'flex',
+                flexDirection: 'column',
+                justify: 'space-between'
+              }}
+            >
+              <div>
+                {/* Header Banner */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #E2E8F0', paddingBottom: '14px', marginBottom: '18px' }}>
+                  <div>
+                    <div style={{ fontSize: '10px', fontWeight: '700', color: '#2563EB', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                      CUSTOMER FEEDBACK & COMPLAINT MANAGEMENT SYSTEM (CFMS)
+                    </div>
+                    <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#0F172A', margin: '4px 0 2px 0' }}>
+                      {exportPayload.title}
+                    </h1>
+                    <div style={{ fontSize: '12px', color: '#64748B', fontWeight: '500' }}>
+                      Period Filter: <strong style={{ color: '#0F172A' }}>{exportPayload.periodText}</strong>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ padding: '4px 10px', backgroundColor: '#EFF6FF', color: '#1D4ED8', borderRadius: '6px', fontSize: '11px', fontWeight: '700', border: '1px solid #BFDBFE' }}>
+                      1-PAGE EXECUTIVE SUMMARY
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '6px' }}>
+                      Generated: {new Date().toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Key Summary Metrics Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(exportPayload.kpiList.length, 6)}, 1fr)`, gap: '10px', marginBottom: '16px' }}>
+                  {exportPayload.kpiList.map((card, idx) => (
+                    <div key={idx} style={{ backgroundColor: '#F8FAFC', border: `1px solid ${card.borderColor || '#E2E8F0'}`, borderRadius: '8px', padding: '10px 12px' }}>
+                      <div style={{ fontSize: '9px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{card.label}</div>
+                      <div style={{ fontSize: '20px', fontWeight: '800', color: card.color || '#0F172A', marginTop: '3px' }}>{card.value}</div>
+                      <div style={{ fontSize: '9px', color: '#94A3B8', marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.subtext}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Highlight Line */}
+                {exportPayload.highlight && (
+                  <div style={{ backgroundColor: '#F0F9FF', borderLeft: '4px solid #0284C7', padding: '9px 14px', borderRadius: '4px', marginBottom: '16px', fontSize: '12px', fontWeight: '600', color: '#0369A1' }}>
+                    💡 {exportPayload.highlight}
+                  </div>
+                )}
+
+                {/* 2 Compact Visual Sections */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
+                  {/* Status Breakdown Box */}
+                  <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '12px 14px' }}>
+                    <h3 style={{ fontSize: '12px', fontWeight: '700', color: '#0F172A', margin: '0 0 10px 0', borderBottom: '1px solid #F1F5F9', paddingBottom: '4px' }}>
+                      Status Distribution
+                    </h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {exportPayload.statusList.map((st, i) => (
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
+                          <span style={{ color: '#475569', fontWeight: '500' }}>{st.name}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ width: '70px', height: '6px', backgroundColor: '#F1F5F9', borderRadius: '3px', overflow: 'hidden' }}>
+                              <div style={{ width: `${st.pct}%`, height: '100%', backgroundColor: st.color }} />
+                            </div>
+                            <span style={{ fontWeight: '700', color: '#0F172A', minWidth: '35px', textAlign: 'right' }}>{st.count} ({st.pct}%)</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Category / Subtype Breakdown Box */}
+                  <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '12px 14px' }}>
+                    <h3 style={{ fontSize: '12px', fontWeight: '700', color: '#0F172A', margin: '0 0 10px 0', borderBottom: '1px solid #F1F5F9', paddingBottom: '4px' }}>
+                      {role === 'Administrator' ? 'Org-Wide Subtype Analysis' : 'Top Complaint Categories'}
+                    </h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {exportPayload.categoryList.slice(0, 6).map((tp, i) => (
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
+                          <span style={{ color: '#475569', fontWeight: '500', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }} title={tp.name}>
+                            {tp.name}
+                          </span>
+                          <span style={{ fontWeight: '700', color: '#2563EB', backgroundColor: '#EFF6FF', padding: '2px 8px', borderRadius: '10px', fontSize: '10px', flexShrink: 0 }}>
+                            {tp.count} complaints
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Role-Specific Secondary Table */}
+                {exportPayload.roleTable && (
+                  <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '12px 14px' }}>
+                    <h3 style={{ fontSize: '12px', fontWeight: '700', color: '#0F172A', margin: '0 0 8px 0', borderBottom: '1px solid #F1F5F9', paddingBottom: '4px' }}>
+                      {exportPayload.roleTable.title}
+                    </h3>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#F8FAFC', color: '#64748B', borderBottom: '1px solid #E2E8F0' }}>
+                          {exportPayload.roleTable.headers.map((h, i) => (
+                            <th key={i} style={{ padding: '5px 8px', fontWeight: '600' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {exportPayload.roleTable.rows.slice(0, 5).map((row, rIdx) => (
+                          <tr key={rIdx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                            {row.map((cell, cIdx) => (
+                              <td key={cIdx} style={{ padding: '5px 8px', color: cIdx === 0 ? '#0F172A' : '#475569', fontWeight: cIdx === 0 ? '600' : '400' }}>{cell}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10px', color: '#94A3B8' }}>
+                <span>Customer Feedback & Complaint Management System (CFMS)</span>
+                <span style={{ fontWeight: '600', color: '#64748B' }}>Executive Report Summary • Page 1 of 1</span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

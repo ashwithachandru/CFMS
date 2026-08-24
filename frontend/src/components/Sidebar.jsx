@@ -1,6 +1,6 @@
 import React from 'react';
 import { 
-  Grid, PlusCircle, FileText, Bell, MessageSquare, BarChart3, Settings, LogOut
+  Grid, PlusCircle, FileText, Bell, MessageSquare, BarChart3, Settings, LogOut, ShieldCheck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -49,6 +49,7 @@ const Sidebar = ({ activeTab, setActiveTab, handleLogout, isDesktop, sidebarOpen
       { name: 'Notifications', icon: <Bell size={18} />, badge: unreadMessagesCount, badgeType: 'normal' },
       { name: 'Messages', icon: <MessageSquare size={18} />, badge: unreadMessagesCount, badgeType: 'high' },
       { name: 'Reports', icon: <BarChart3 size={18} /> },
+      { name: 'Access Control', icon: <ShieldCheck size={18} />, adminOnly: true },
       { name: 'Settings', icon: <Settings size={18} />, adminOnly: true }
     ];
 

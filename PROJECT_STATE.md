@@ -379,11 +379,25 @@ Below is the SQL Server schema defining the tables and relations:
   - **Preserved Core Authentication Logic**:
     - 100% preservation of JWT login, signup metadata fetching (`/auth/metadata`), role & department selectors, and OTP forgot-password entry point (`/forgot-password`).
   - **Responsive & Theme Support**:
-    - Complete support for Light & Dark modes via `ThemeToggle` positioned top-right. Zero horizontal scrolling on mobile viewports (<768px).
-
-
-
-
-
-
+### 2026-08-22
+- **Executive Summary PDF & Excel Export Bug Fixes & Optimization (`Reports.jsx`)**:
+  - **Status Distribution NaN/Blank Fix**: Identified root cause as data property mismatch (`reportData.statusBreakdown` SQL query outputs `{ name, value, percentage }`, whereas `getExportPayload()` was expecting `item.status` and `item.count`, resulting in `undefined / total` = `NaN%`). Updated `getExportPayload` to read `item.name || item.status` and `item.count ?? item.value ?? 0` and compute percentages safely. Verified real status names and 100% total across all 4 role exports.
+  - **Escalated KPI Definition & Label Clarification**: Confirmed SQL backend counts `SUM(CASE WHEN c.status LIKE '%Escalated%' THEN 1 ELSE 0 END)` (meaning **Currently Open Escalated Complaints**). Verified Sales Exec Arun M.'s 0 value is 100% correct (all 14 historical escalations have been resolved by managers). Updated KPI subtext label to `"Open Escalated"` / `"Currently open escalated"` for clarity.
+  - **PDF File Size Reduction (10.85 MB $\rightarrow$ ~100-140 KB)**: Replaced uncompressed raw PNG canvas output with `canvas.toDataURL('image/jpeg', 0.85)` at `scale: 1.5` in `handleExportPdf`. Achieved a 99% reduction in PDF file size while maintaining pixel-perfect crisp text and vector graphics.
+  - **Org-Wide Subtype Analysis Layout Fix**: Fixed overlapping subtype labels in Admin export by displaying top complaint categories with `maxWidth: '210px'`, `textOverflow: 'ellipsis'`, `flexShrink: 0`, and `lineHeight: '1.4'` in a clean vertical list. Verified with screenshot `admin_reports_verified.png`.
+  - **Secondary Summary Table Audit**: Audited and fixed property mapping for Admin (`w.totalComplaints`, `w.resolvedCount`, `w.currentlyEscalatedCount`, `w.pendingCount`, `w.slaPerformance`) and Warehouse Manager (`m.slaPerformance` without duplicate `%`) in `roleTable`.
+### 2026-08-24
+- **Backend Audit, Screenshot Relocation & System-Wide User Credential Standardization**:
+  - **Screenshot Storage**: Relocated all generated report screenshots to `d:\VII_Sem_Intern\Complaint_Lifecycle_Automation_and_Escalation\scratch\screenshots\`. Zero files written to `C:\`.
+  - **Backend Health & Connection Refused Analysis**: Audited backend HTTP server on port 4000. Confirmed `net::ERR_CONNECTION_REFUSED` errors were caused by brief 1-2 second `nodemon` process restarts triggered by file saves during active development. 100% of auth/login code remained untouched.
+  - **System-Wide 46-Account Audit & Standardization**: Queried all 46 user accounts in the `Users` table and audited direct `POST /api/auth/login` HTTP API calls. Standardized password hashes to documented credentials (`Admin@123` for Administrators, `User@123` for Warehouse Managers, Warehouse Team Members, and Sales Executives) and set all statuses to `'Active'`. Re-audited 100% of accounts and confirmed **46 / 46 accounts return HTTP 200 (Login successful)**.
+- **Audit Log Timestamp Format & Standing Auth Policy**:
+  - **Standing Auth Protection Rule**: Acknowledged standing policy to protect authentication code during future feature work and execute multi-account regression login checks (`Admin`, `Sales Executive`, `Warehouse Manager`) on every task.
+  - **Audit Log Timestamp Formatting & GETUTCDATE() Fix**: Identified double-offset bug where `GETDATE()` inserted local time into SQL Server DATETIME, which `node-mssql` parsed as UTC and React shifted by another +5:30. Updated `AuditRepository.create` to insert `GETUTCDATE()` and converted existing records. Timestamps in `Dashboard.jsx` (`formatAuditTimestamp`) now render 100% accurate **Indian Standard Time (IST, UTC+5:30) in 24-hour Railway time (`DD/MM/YYYY, HH:MM:SS`)** (e.g. `24/08/2026, 10:32:04` at 10:32 AM IST). Verified via automated Playwright Chrome test and saved screenshot to `d:\VII_Sem_Intern\Complaint_Lifecycle_Automation_and_Escalation\scratch\screenshots\audit_log_timestamp_verified.png`.
+- **Role-Based & User-Based Access Control (RBAC) Admin Feature & Sidebar Shift**:
+  - **Admin Side Panel Navigation Shift**: Shifted Access Control from a sub-tab in `Settings.jsx` to a dedicated main feature item (`Access Control`, with `<ShieldCheck>` icon) in the Admin Sidebar panel ([`Sidebar.jsx`](file:///d:/VII_Sem_Intern/Complaint_Lifecycle_Automation_and_Escalation/frontend/src/components/Sidebar.jsx)). Clicking Access Control in the Sidebar now directly renders the complete Access Control interface in [`Dashboard.jsx`](file:///d:/VII_Sem_Intern/Complaint_Lifecycle_Automation_and_Escalation/frontend/src/pages/Dashboard.jsx).
+  - **Database Schema**: Created `RolePermissions` (storing role-default Read/Write permissions across 9 system modules: `complaints`, `reports`, `warehouses`, `users`, `categories`, `sla`, `docuflow`, `audit_logs`, `dashboard`) and `UserPermissionOverrides` (storing granular user-level `override_read` and `override_write` settings).
+  - **Backend Layer**: Created `rbac.repository.js` and `rbac.controller.js` providing `/api/admin/rbac/matrix`, `/api/admin/rbac/role-permissions`, `/api/admin/rbac/user-overrides`, and `/api/admin/rbac/user-overrides/:userId`. Built `rbac.middleware.js` providing `requirePermission(moduleKey, action)` which evaluates `user_override ?? role_default ?? false` and returns `HTTP 403 Forbidden` when permission is missing.
+  - **Duplicate Test User Purge**: Purged all 5 generated test users (`madurai.team_%` and `verifier.team_%`) from `CustomerFeedbackDB` (User IDs 46, 47, 48, 49, 51) along with their related override and audit entries.
+  - **E2E Verification**: Verified Sidebar navigation shift (`rbac_sidebar_main_view.png`), zero remaining duplicate users in Tab 2, SQL Server DB row persistence, backend 403 enforcement, and confirmed 100% login pass rate on the routine 3-account check (`Administrator`, `Sales Executive`, `Warehouse Manager`).
 

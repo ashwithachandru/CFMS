@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Settings from './Settings';
+import AccessControl from '../components/AccessControl';
 import { 
   FileSpreadsheet, Clock, RefreshCw, ShieldAlert, CheckSquare, BarChart3,
   Users, AlertTriangle, Activity, ArrowRight, Building2, Layers
@@ -16,6 +17,27 @@ import ComplaintsTable from '../components/ComplaintsTable';
 import MessagePanel from '../components/MessagePanel';
 import Reports from './Reports';
 import { api } from '../services/api';
+
+const formatAuditTimestamp = (dateInput) => {
+  if (!dateInput) return '-';
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return '-';
+  
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  }).formatToParts(d);
+
+  const p = {};
+  parts.forEach(pt => p[pt.type] = pt.value);
+  return `${p.day}/${p.month}/${p.year}, ${p.hour}:${p.minute}:${p.second}`;
+};
 
 const AdminDashboardView = ({ onNavigateTab }) => {
   const [dashboardData, setDashboardData] = useState(null);
@@ -184,7 +206,7 @@ const AdminDashboardView = ({ onNavigateTab }) => {
                 recentAuditLogs.map(log => (
                   <tr key={log.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
                     <td style={{ padding: '10px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                      {new Date(log.timestamp).toLocaleString()}
+                      {formatAuditTimestamp(log.timestamp)}
                     </td>
                     <td style={{ padding: '10px', fontWeight: '600', color: 'var(--text-primary)' }}>{log.user_name}</td>
                     <td style={{ padding: '10px', color: 'var(--text-secondary)' }}>{log.user_role}</td>
@@ -892,6 +914,8 @@ const [unreadCount, setUnreadCount] = useState(0);
             </div>
           ) : activeTab === 'Reports' ? (
             <Reports />
+          ) : activeTab === 'Access Control' ? (
+            <AccessControl />
           ) : activeTab === 'Settings' ? (
             <Settings />
           ) : activeTab === 'My Complaints' || activeTab === 'Escalated Complaints' ? (
