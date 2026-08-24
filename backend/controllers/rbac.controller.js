@@ -157,6 +157,19 @@ class RbacController {
       return res.status(500).json({ success: false, message: err.message });
     }
   }
+
+  async getMyPermissions(req, res) {
+    try {
+      const userId = req.user.id || req.user.userId;
+      const roleName = req.user.role;
+
+      const permissions = await rbacRepo.getUserEffectivePermissionsMap(userId, roleName);
+      return res.json({ success: true, data: permissions });
+    } catch (err) {
+      console.error('Error fetching user permissions:', err);
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  }
 }
 
 module.exports = new RbacController();

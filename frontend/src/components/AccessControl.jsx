@@ -3,6 +3,7 @@ import {
   ShieldCheck, Users, Search, RefreshCw, Check, X, Building2, ChevronDown, ChevronUp, RotateCcw, Lock, Edit3, Eye
 } from 'lucide-react';
 import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 const ROLE_COLORS = {
   'Administrator': { bg: 'rgba(139, 92, 246, 0.12)', text: '#8B5CF6', border: 'rgba(139, 92, 246, 0.3)' },
@@ -19,6 +20,7 @@ const getInitials = (name) => {
 };
 
 const AccessControl = () => {
+  const { refreshPermissions } = useAuth();
   const [activeTab, setActiveTab] = useState('role-based'); // 'role-based' | 'user-based'
   const [loading, setLoading] = useState(true);
   const [modules, setModules] = useState([]);
@@ -48,13 +50,14 @@ const AccessControl = () => {
     try {
       const res = await api.get('/admin/rbac/matrix');
       if (res.ok) {
-        const json = await res.json();
-        const data = json.data || {};
-        setModules(data.modules || []);
-        setRoles(data.roles || []);
-        setRoleMatrix(data.roleMatrix || {});
-        setUserOverrideMap(data.userOverrideMap || {});
-        setUsers(data.users || []);
+        const body = await res.json();
+        if (body.success) {
+          setModules(body.data.modules || []);
+          setRoles(body.data.roles || []);
+          setRoleMatrix(body.data.roleMatrix || {});
+          setUserOverrideMap(body.data.userOverrideMap || {});
+          setUsers(body.data.users || []);
+        }
       } else {
         showToast('Failed to load RBAC permissions matrix', true);
       }
@@ -73,8 +76,13 @@ const AccessControl = () => {
   // Handle Role Matrix Cell Toggle
   const handleToggleRolePermission = async (roleName, moduleKey, permType) => {
     const current = roleMatrix[roleName]?.[moduleKey] || { canRead: false, canWrite: false };
-    const canRead = permType === 'read' ? !current.canRead : current.canRead;
-    const canWrite = permType === 'write' ? !current.canWrite : current.canWrite;
+    let canRead = permType === 'read' ? !current.canRead : current.canRead;
+    let canWrite = permType === 'write' ? !current.canWrite : current.canWrite;
+
+    // Audit logs module can NEVER be edited/written
+    if (moduleKey === 'audit_logs') {
+      canWrite = false;
+    }
 
     // Optimistic Update
     setRoleMatrix(prev => ({
@@ -100,6 +108,7 @@ const AccessControl = () => {
       } else {
         showToast(`Updated ${roleName} defaults for ${moduleKey}`);
         fetchRbacData(); // recalculate pill counts
+        if (refreshPermissions) refreshPermissions();
       }
     } catch (err) {
       console.error(err);
@@ -112,7 +121,11 @@ const AccessControl = () => {
   const handleToggleUserOverride = async (userId, moduleKey, permType, value) => {
     const current = userOverrideMap[userId]?.[moduleKey] || { overrideRead: null, overrideWrite: null };
     const overrideRead = permType === 'read' ? value : current.overrideRead;
-    const overrideWrite = permType === 'write' ? value : current.overrideWrite;
+    let overrideWrite = permType === 'write' ? value : current.overrideWrite;
+
+    if (moduleKey === 'audit_logs') {
+      overrideWrite = false;
+    }
 
     // Optimistic Update
     setUserOverrideMap(prev => ({
@@ -137,6 +150,7 @@ const AccessControl = () => {
       } else {
         showToast('Updated user permission override');
         fetchRbacData(); // recalculate pill counts
+        if (refreshPermissions) refreshPermissions();
       }
     } catch (err) {
       console.error(err);
@@ -154,6 +168,7 @@ const AccessControl = () => {
       if (res.ok) {
         showToast(`Reset overrides for ${userName}`);
         fetchRbacData();
+        if (refreshPermissions) refreshPermissions();
       } else {
         showToast('Failed to reset user overrides', true);
       }
@@ -343,23 +358,42 @@ const AccessControl = () => {
                             </button>
                           </td>
 
-                          {/* WRITE TOGGLE */}
+                          {/* WRITE TOGGLE / READ-ONLY BADGE */}
                           <td style={{ padding: '10px 8px', textAlign: 'center' }}>
-                            <button
-                              onClick={() => handleToggleRolePermission(r, m.key, 'write')}
-                              style={{
-                                width: '36px', height: '20px', borderRadius: '10px', border: 'none', cursor: 'pointer',
-                                backgroundColor: perm.canWrite ? '#10B981' : 'var(--border-color)',
-                                position: 'relative', transition: 'background-color 200ms ease', padding: 0
-                              }}
-                              title={`${r} Write ${m.name}: ${perm.canWrite ? 'Granted' : 'Revoked'}`}
-                            >
-                              <div style={{
-                                width: '16px', height: '16px', borderRadius: '50%', backgroundColor: '#FFF',
-                                position: 'absolute', top: '2px', left: perm.canWrite ? '18px' : '2px',
-                                transition: 'left 200ms ease', boxShadow: '0 1px 2px rgba(0,0,0,0.2)'
-                              }} />
-                            </button>
+                            {m.key === 'audit_logs' ? (
+                              <span 
+                                style={{
+                                  padding: '4px 8px',
+                                  borderRadius: '6px',
+                                  fontSize: '11px',
+                                  fontWeight: '700',
+                                  backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                                  color: '#EF4444',
+                                  border: '1px solid rgba(239, 68, 68, 0.2)',
+                                  whiteSpace: 'nowrap',
+                                  display: 'inline-block'
+                                }}
+                                title="Audit Logs are immutable system records and strictly Read-Only for all roles"
+                              >
+                                Read-Only
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => handleToggleRolePermission(r, m.key, 'write')}
+                                style={{
+                                  width: '36px', height: '20px', borderRadius: '10px', border: 'none', cursor: 'pointer',
+                                  backgroundColor: perm.canWrite ? '#10B981' : 'var(--border-color)',
+                                  position: 'relative', transition: 'background-color 200ms ease', padding: 0
+                                }}
+                                title={`${r} Write ${m.name}: ${perm.canWrite ? 'Granted' : 'Revoked'}`}
+                              >
+                                <div style={{
+                                  width: '16px', height: '16px', borderRadius: '50%', backgroundColor: '#FFF',
+                                  position: 'absolute', top: '2px', left: perm.canWrite ? '18px' : '2px',
+                                  transition: 'left 200ms ease', boxShadow: '0 1px 2px rgba(0,0,0,0.2)'
+                                }} />
+                              </button>
+                            )}
                           </td>
                         </React.Fragment>
                       );
@@ -547,7 +581,7 @@ const AccessControl = () => {
                                 const uOverride = userOverrides[m.key] || { overrideRead: null, overrideWrite: null };
 
                                 const effRead = uOverride.overrideRead !== null ? uOverride.overrideRead : roleDef.canRead;
-                                const effWrite = uOverride.overrideWrite !== null ? uOverride.overrideWrite : roleDef.canWrite;
+                                const effWrite = m.key === 'audit_logs' ? false : (uOverride.overrideWrite !== null ? uOverride.overrideWrite : roleDef.canWrite);
 
                                 return (
                                   <tr key={m.key} style={{ borderBottom: '1px solid var(--border-color)' }}>
@@ -558,7 +592,7 @@ const AccessControl = () => {
 
                                     {/* Role Default */}
                                     <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                                      View: {roleDef.canRead ? 'Yes' : 'No'} | Edit: {roleDef.canWrite ? 'Yes' : 'No'}
+                                      View: {roleDef.canRead ? 'Yes' : 'No'} | Edit: {m.key === 'audit_logs' ? 'Read-Only' : (roleDef.canWrite ? 'Yes' : 'No')}
                                     </td>
 
                                     {/* Read Override Selector */}
@@ -582,21 +616,31 @@ const AccessControl = () => {
 
                                     {/* Write Override Selector */}
                                     <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                      <select
-                                        value={uOverride.overrideWrite === null ? 'default' : uOverride.overrideWrite ? 'grant' : 'revoke'}
-                                        onChange={(e) => {
-                                          const val = e.target.value === 'default' ? null : e.target.value === 'grant';
-                                          handleToggleUserOverride(u.id, m.key, 'write', val);
-                                        }}
-                                        style={{
-                                          padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border-color)',
-                                          backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '12px'
-                                        }}
-                                      >
-                                        <option value="default">Role Default ({roleDef.canWrite ? 'Edit' : 'No Edit'})</option>
-                                        <option value="grant">Grant Edit</option>
-                                        <option value="revoke">Revoke Edit</option>
-                                      </select>
+                                      {m.key === 'audit_logs' ? (
+                                        <span style={{
+                                          padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '700',
+                                          backgroundColor: 'rgba(239, 68, 68, 0.08)', color: '#EF4444',
+                                          border: '1px solid rgba(239, 68, 68, 0.2)', whiteSpace: 'nowrap'
+                                        }}>
+                                          Read-Only
+                                        </span>
+                                      ) : (
+                                        <select
+                                          value={uOverride.overrideWrite === null ? 'default' : uOverride.overrideWrite ? 'grant' : 'revoke'}
+                                          onChange={(e) => {
+                                            const val = e.target.value === 'default' ? null : e.target.value === 'grant';
+                                            handleToggleUserOverride(u.id, m.key, 'write', val);
+                                          }}
+                                          style={{
+                                            padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border-color)',
+                                            backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '12px'
+                                          }}
+                                        >
+                                          <option value="default">Role Default ({roleDef.canWrite ? 'Edit' : 'No Edit'})</option>
+                                          <option value="grant">Grant Edit</option>
+                                          <option value="revoke">Revoke Edit</option>
+                                        </select>
+                                      )}
                                     </td>
 
                                     {/* Effective Access Pill */}

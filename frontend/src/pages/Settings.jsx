@@ -8,8 +8,33 @@ import { useAuth } from '../context/AuthContext';
 import AccessControl from '../components/AccessControl';
 
 const Settings = ({ initialTab = 'users' }) => {
-  const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState(initialTab);
+  const { user, hasPermission } = useAuth();
+
+  const canViewUsers = hasPermission('users', 'read');
+  const canWriteUsers = hasPermission('users', 'write');
+  const canViewWarehouses = hasPermission('warehouses', 'read');
+  const canWriteWarehouses = hasPermission('warehouses', 'write');
+  const canViewCategories = hasPermission('categories', 'read');
+  const canWriteCategories = hasPermission('categories', 'write');
+  const canViewSla = hasPermission('sla', 'read');
+  const canWriteSla = hasPermission('sla', 'write');
+
+  // Determine initial valid tab
+  const getFirstValidTab = () => {
+    if (canViewUsers) return 'users';
+    if (canViewWarehouses) return 'warehouses';
+    if (canViewCategories) return 'categories';
+    if (canViewSla) return 'sla';
+    return 'theme';
+  };
+
+  const [activeTab, setActiveTab] = useState(() => {
+    if (initialTab === 'users' && !canViewUsers) return getFirstValidTab();
+    if (initialTab === 'warehouses' && !canViewWarehouses) return getFirstValidTab();
+    if (initialTab === 'categories' && !canViewCategories) return getFirstValidTab();
+    if (initialTab === 'sla' && !canViewSla) return getFirstValidTab();
+    return initialTab;
+  });
 
   // System Settings state (SLA Configuration)
   const [settings, setSettings] = useState({
@@ -351,54 +376,62 @@ const Settings = ({ initialTab = 'users' }) => {
 
       {/* Settings Tab Navigation */}
       <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-color)', marginBottom: '24px', overflowX: 'auto' }}>
-        <button
-          onClick={() => setActiveTab('users')}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 18px',
-            fontSize: '14px', fontWeight: '600', border: 'none', cursor: 'pointer',
-            borderBottom: activeTab === 'users' ? '2px solid var(--brand-primary)' : '2px solid transparent',
-            color: activeTab === 'users' ? 'var(--brand-primary)' : 'var(--text-secondary)',
-            backgroundColor: 'transparent'
-          }}
-        >
-          <Users size={18} /> User Management
-        </button>
-        <button
-          onClick={() => setActiveTab('warehouses')}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 18px',
-            fontSize: '14px', fontWeight: '600', border: 'none', cursor: 'pointer',
-            borderBottom: activeTab === 'warehouses' ? '2px solid var(--brand-primary)' : '2px solid transparent',
-            color: activeTab === 'warehouses' ? 'var(--brand-primary)' : 'var(--text-secondary)',
-            backgroundColor: 'transparent'
-          }}
-        >
-          <Building2 size={18} /> Warehouse Management
-        </button>
-        <button
-          onClick={() => setActiveTab('categories')}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 18px',
-            fontSize: '14px', fontWeight: '600', border: 'none', cursor: 'pointer',
-            borderBottom: activeTab === 'categories' ? '2px solid var(--brand-primary)' : '2px solid transparent',
-            color: activeTab === 'categories' ? 'var(--brand-primary)' : 'var(--text-secondary)',
-            backgroundColor: 'transparent'
-          }}
-        >
-          <Layers size={18} /> Complaint Categories
-        </button>
-        <button
-          onClick={() => setActiveTab('sla')}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 18px',
-            fontSize: '14px', fontWeight: '600', border: 'none', cursor: 'pointer',
-            borderBottom: activeTab === 'sla' ? '2px solid var(--brand-primary)' : '2px solid transparent',
-            color: activeTab === 'sla' ? 'var(--brand-primary)' : 'var(--text-secondary)',
-            backgroundColor: 'transparent'
-          }}
-        >
-          <Clock size={18} /> SLA Configuration
-        </button>
+        {canViewUsers && (
+          <button
+            onClick={() => setActiveTab('users')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 18px',
+              fontSize: '14px', fontWeight: '600', border: 'none', cursor: 'pointer',
+              borderBottom: activeTab === 'users' ? '2px solid var(--brand-primary)' : '2px solid transparent',
+              color: activeTab === 'users' ? 'var(--brand-primary)' : 'var(--text-secondary)',
+              backgroundColor: 'transparent'
+            }}
+          >
+            <Users size={18} /> User Management
+          </button>
+        )}
+        {canViewWarehouses && (
+          <button
+            onClick={() => setActiveTab('warehouses')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 18px',
+              fontSize: '14px', fontWeight: '600', border: 'none', cursor: 'pointer',
+              borderBottom: activeTab === 'warehouses' ? '2px solid var(--brand-primary)' : '2px solid transparent',
+              color: activeTab === 'warehouses' ? 'var(--brand-primary)' : 'var(--text-secondary)',
+              backgroundColor: 'transparent'
+            }}
+          >
+            <Building2 size={18} /> Warehouse Management
+          </button>
+        )}
+        {canViewCategories && (
+          <button
+            onClick={() => setActiveTab('categories')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 18px',
+              fontSize: '14px', fontWeight: '600', border: 'none', cursor: 'pointer',
+              borderBottom: activeTab === 'categories' ? '2px solid var(--brand-primary)' : '2px solid transparent',
+              color: activeTab === 'categories' ? 'var(--brand-primary)' : 'var(--text-secondary)',
+              backgroundColor: 'transparent'
+            }}
+          >
+            <Layers size={18} /> Complaint Categories
+          </button>
+        )}
+        {canViewSla && (
+          <button
+            onClick={() => setActiveTab('sla')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 18px',
+              fontSize: '14px', fontWeight: '600', border: 'none', cursor: 'pointer',
+              borderBottom: activeTab === 'sla' ? '2px solid var(--brand-primary)' : '2px solid transparent',
+              color: activeTab === 'sla' ? 'var(--brand-primary)' : 'var(--text-secondary)',
+              backgroundColor: 'transparent'
+            }}
+          >
+            <Clock size={18} /> SLA Configuration
+          </button>
+        )}
         <button
           onClick={() => setActiveTab('theme')}
           style={{
@@ -438,20 +471,22 @@ const Settings = ({ initialTab = 'users' }) => {
               <h2 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>System User Accounts</h2>
               <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>Manage all Sales Executives, Warehouse Team Members, Managers, and Administrators.</p>
             </div>
-            <button
-              onClick={() => {
-                setUserError('');
-                setUserForm({ email: '', password: '', firstName: '', lastName: '', role: 'Sales Executive', warehouseId: '' });
-                setShowCreateUserModal(true);
-              }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px',
-                borderRadius: '8px', backgroundColor: 'var(--brand-primary)', color: '#FFFFFF',
-                fontWeight: '600', fontSize: '13px', border: 'none', cursor: 'pointer'
-              }}
-            >
-              <Plus size={16} /> Create New User
-            </button>
+            {canWriteUsers && (
+              <button
+                onClick={() => {
+                  setUserError('');
+                  setUserForm({ email: '', password: '', firstName: '', lastName: '', role: 'Sales Executive', warehouseId: '' });
+                  setShowCreateUserModal(true);
+                }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px',
+                  borderRadius: '8px', backgroundColor: 'var(--brand-primary)', color: '#FFFFFF',
+                  fontWeight: '600', fontSize: '13px', border: 'none', cursor: 'pointer'
+                }}
+              >
+                <Plus size={16} /> Create New User
+              </button>
+            )}
           </div>
 
           {/* Search & Filters Toolbar */}
@@ -555,46 +590,50 @@ const Settings = ({ initialTab = 'users' }) => {
                         </span>
                       </td>
                       <td style={{ padding: '12px 10px', textAlign: 'right' }}>
-                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                          <button
-                            title="Edit User Role/Warehouse"
-                            onClick={() => {
-                              setSelectedUser(u);
-                              setUserForm({
-                                email: u.email,
-                                password: '',
-                                firstName: u.first_name,
-                                lastName: u.last_name,
-                                role: u.role,
-                                warehouseId: u.warehouse_id || ''
-                              });
-                              setShowEditUserModal(true);
-                            }}
-                            style={{ padding: '6px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)', cursor: 'pointer' }}
-                          >
-                            <Edit2 size={14} style={{ color: 'var(--text-secondary)' }} />
-                          </button>
+                        {canWriteUsers ? (
+                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                            <button
+                              title="Edit User Role/Warehouse"
+                              onClick={() => {
+                                setSelectedUser(u);
+                                setUserForm({
+                                  email: u.email,
+                                  password: '',
+                                  firstName: u.first_name,
+                                  lastName: u.last_name,
+                                  role: u.role,
+                                  warehouseId: u.warehouse_id || ''
+                                });
+                                setShowEditUserModal(true);
+                              }}
+                              style={{ padding: '6px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)', cursor: 'pointer' }}
+                            >
+                              <Edit2 size={14} style={{ color: 'var(--text-secondary)' }} />
+                            </button>
 
-                          <button
-                            title={u.status === 'Active' ? 'Deactivate User Account' : 'Reactivate User Account'}
-                            onClick={() => handleToggleStatus(u)}
-                            style={{ padding: '6px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)', cursor: 'pointer' }}
-                          >
-                            {u.status === 'Active' ? <UserX size={14} style={{ color: '#EF4444' }} /> : <UserCheck size={14} style={{ color: '#10B981' }} />}
-                          </button>
+                            <button
+                              title={u.status === 'Active' ? 'Deactivate User Account' : 'Reactivate User Account'}
+                              onClick={() => handleToggleStatus(u)}
+                              style={{ padding: '6px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)', cursor: 'pointer' }}
+                            >
+                              {u.status === 'Active' ? <UserX size={14} style={{ color: '#EF4444' }} /> : <UserCheck size={14} style={{ color: '#10B981' }} />}
+                            </button>
 
-                          <button
-                            title="Reset User Password"
-                            onClick={() => {
-                              setSelectedUser(u);
-                              setResetPasswordValue('');
-                              setShowResetPasswordModal(true);
-                            }}
-                            style={{ padding: '6px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)', cursor: 'pointer' }}
-                          >
-                            <Key size={14} style={{ color: '#F59E0B' }} />
-                          </button>
-                        </div>
+                            <button
+                              title="Reset User Password"
+                              onClick={() => {
+                                setSelectedUser(u);
+                                setResetPasswordValue('');
+                                setShowResetPasswordModal(true);
+                              }}
+                              style={{ padding: '6px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)', cursor: 'pointer' }}
+                            >
+                              <Key size={14} style={{ color: '#F59E0B' }} />
+                            </button>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Read-Only</span>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -613,21 +652,23 @@ const Settings = ({ initialTab = 'users' }) => {
               <h2 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>Warehouse Facilities</h2>
               <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>Manage physical warehouse locations, team staffing, and complaint scoping.</p>
             </div>
-            <button
-              onClick={() => {
-                setEditingWarehouse(null);
-                setWarehouseForm({ name: '', location: '' });
-                setWarehouseError('');
-                setShowWarehouseModal(true);
-              }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px',
-                borderRadius: '8px', backgroundColor: 'var(--brand-primary)', color: '#FFFFFF',
-                fontWeight: '600', fontSize: '13px', border: 'none', cursor: 'pointer'
-              }}
-            >
-              <Plus size={16} /> Add New Warehouse
-            </button>
+            {canWriteWarehouses && (
+              <button
+                onClick={() => {
+                  setEditingWarehouse(null);
+                  setWarehouseForm({ name: '', location: '' });
+                  setWarehouseError('');
+                  setShowWarehouseModal(true);
+                }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px',
+                  borderRadius: '8px', backgroundColor: 'var(--brand-primary)', color: '#FFFFFF',
+                  fontWeight: '600', fontSize: '13px', border: 'none', cursor: 'pointer'
+                }}
+              >
+                <Plus size={16} /> Add New Warehouse
+              </button>
+            )}
           </div>
 
           <div style={{ overflowX: 'auto' }} className="scrollbar-thin">
@@ -658,25 +699,29 @@ const Settings = ({ initialTab = 'users' }) => {
                       <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '600', color: '#F59E0B' }}>{w.managerCount}</td>
                       <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '600', color: 'var(--text-primary)' }}>{w.totalComplaints}</td>
                       <td style={{ padding: '12px 10px', textAlign: 'right' }}>
-                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                          <button
-                            onClick={() => {
-                              setEditingWarehouse(w);
-                              setWarehouseForm({ name: w.name, location: w.location });
-                              setWarehouseError('');
-                              setShowWarehouseModal(true);
-                            }}
-                            style={{ padding: '6px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)', cursor: 'pointer' }}
-                          >
-                            <Edit2 size={14} style={{ color: 'var(--text-secondary)' }} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteWarehouse(w)}
-                            style={{ padding: '6px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)', cursor: 'pointer' }}
-                          >
-                            <Trash2 size={14} style={{ color: '#EF4444' }} />
-                          </button>
-                        </div>
+                        {canWriteWarehouses ? (
+                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                            <button
+                              onClick={() => {
+                                setEditingWarehouse(w);
+                                setWarehouseForm({ name: w.name, location: w.location });
+                                setWarehouseError('');
+                                setShowWarehouseModal(true);
+                              }}
+                              style={{ padding: '6px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)', cursor: 'pointer' }}
+                            >
+                              <Edit2 size={14} style={{ color: 'var(--text-secondary)' }} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteWarehouse(w)}
+                              style={{ padding: '6px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)', cursor: 'pointer' }}
+                            >
+                              <Trash2 size={14} style={{ color: '#EF4444' }} />
+                            </button>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Read-Only</span>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -694,12 +739,14 @@ const Settings = ({ initialTab = 'users' }) => {
           <div style={{ backgroundColor: 'var(--bg-primary)', padding: '24px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h2 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>Complaint Types</h2>
-              <button
-                onClick={() => { setTypeError(''); setShowTypeModal(true); }}
-                style={{ padding: '8px 14px', borderRadius: '6px', backgroundColor: 'var(--brand-primary)', color: '#FFF', fontSize: '12px', fontWeight: '600', border: 'none', cursor: 'pointer' }}
-              >
-                + Add Type
-              </button>
+              {canWriteCategories && (
+                <button
+                  onClick={() => { setTypeError(''); setShowTypeModal(true); }}
+                  style={{ padding: '8px 14px', borderRadius: '6px', backgroundColor: 'var(--brand-primary)', color: '#FFF', fontSize: '12px', fontWeight: '600', border: 'none', cursor: 'pointer' }}
+                >
+                  + Add Type
+                </button>
+              )}
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
@@ -725,12 +772,14 @@ const Settings = ({ initialTab = 'users' }) => {
           <div style={{ backgroundColor: 'var(--bg-primary)', padding: '24px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h2 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>Complaint Subtypes</h2>
-              <button
-                onClick={() => { setTypeError(''); setShowSubtypeModal(true); }}
-                style={{ padding: '8px 14px', borderRadius: '6px', backgroundColor: 'var(--brand-primary)', color: '#FFF', fontSize: '12px', fontWeight: '600', border: 'none', cursor: 'pointer' }}
-              >
-                + Add Subtype
-              </button>
+              {canWriteCategories && (
+                <button
+                  onClick={() => { setTypeError(''); setShowSubtypeModal(true); }}
+                  style={{ padding: '8px 14px', borderRadius: '6px', backgroundColor: 'var(--brand-primary)', color: '#FFF', fontSize: '12px', fontWeight: '600', border: 'none', cursor: 'pointer' }}
+                >
+                  + Add Subtype
+                </button>
+              )}
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
@@ -775,6 +824,7 @@ const Settings = ({ initialTab = 'users' }) => {
                 type="number"
                 min="1"
                 max="168"
+                disabled={!canWriteSla}
                 value={settings.sla_window_hours || '24'}
                 onChange={(e) => setSettings({ ...settings, sla_window_hours: e.target.value })}
                 style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
@@ -790,6 +840,7 @@ const Settings = ({ initialTab = 'users' }) => {
               </label>
               <input
                 type="number"
+                disabled={!canWriteSla}
                 value={settings.sla_threshold_green_hours || '12'}
                 onChange={(e) => setSettings({ ...settings, sla_threshold_green_hours: e.target.value })}
                 style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
@@ -802,22 +853,25 @@ const Settings = ({ initialTab = 'users' }) => {
               </label>
               <input
                 type="number"
+                disabled={!canWriteSla}
                 value={settings.sla_threshold_amber_hours || '6'}
                 onChange={(e) => setSettings({ ...settings, sla_threshold_amber_hours: e.target.value })}
                 style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
               />
             </div>
 
-            <button
-              type="submit"
-              disabled={savingSettings}
-              style={{
-                padding: '12px 24px', borderRadius: '8px', backgroundColor: 'var(--brand-primary)',
-                color: '#FFF', fontWeight: '700', border: 'none', cursor: 'pointer', alignSelf: 'flex-start'
-              }}
-            >
-              {savingSettings ? 'Saving Settings...' : 'Save SLA Settings'}
-            </button>
+            {canWriteSla && (
+              <button
+                type="submit"
+                disabled={savingSettings}
+                style={{
+                  padding: '12px 24px', borderRadius: '8px', backgroundColor: 'var(--brand-primary)',
+                  color: '#FFF', fontWeight: '700', border: 'none', cursor: 'pointer', alignSelf: 'flex-start'
+                }}
+              >
+                {savingSettings ? 'Saving Settings...' : 'Save SLA Settings'}
+              </button>
+            )}
           </form>
         </div>
       )}

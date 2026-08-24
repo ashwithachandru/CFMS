@@ -5,7 +5,40 @@ const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [permissions, setPermissions] = useState({});
   const [loading, setLoading] = useState(true);
+
+  const fetchPermissions = useCallback(async () => {
+    try {
+      const res = await api.get('/admin/rbac/my-permissions');
+      if (res.ok) {
+        const body = await res.json();
+        if (body.success) {
+          setPermissions(body.data || {});
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch user permissions:', err);
+    }
+  }, []);
+
+  const refreshPermissions = useCallback(async () => {
+    await fetchPermissions();
+  }, [fetchPermissions]);
+
+  const hasPermission = useCallback((moduleKey, action = 'read') => {
+    if (!user) return false;
+    const modulePerm = permissions[moduleKey];
+
+    // Administrator fallback if permissions map isn't fully loaded yet
+    if (user.role === 'Administrator' && !modulePerm) {
+      if (moduleKey === 'audit_logs' && action === 'write') return false;
+      return true;
+    }
+
+    if (!modulePerm) return false;
+    return action === 'write' ? Boolean(modulePerm.canWrite) : Boolean(modulePerm.canRead);
+  }, [user, permissions]);
 
   const logout = useCallback(async () => {
     try {
@@ -16,6 +49,7 @@ export const AuthProvider = ({ children }) => {
       console.error('Logout request failed:', err);
     } finally {
       setUser(null);
+      setPermissions({});
       setAccessToken('');
       localStorage.removeItem('user_logged_in');
     }
@@ -45,6 +79,9 @@ export const AuthProvider = ({ children }) => {
             warehouseName: fetchedUser.warehouse_name
           });
           localStorage.setItem('user_logged_in', 'true');
+
+          // Fetch permissions for the logged in user
+          await fetchPermissions();
           return token;
         }
       }
@@ -52,7 +89,7 @@ export const AuthProvider = ({ children }) => {
       console.error('Session refresh failed:', err.message);
     }
     return null;
-  }, []);
+  }, [fetchPermissions]);
 
   // Initialize and check active session on app mount
   useEffect(() => {
@@ -93,6 +130,9 @@ export const AuthProvider = ({ children }) => {
     setAccessToken(result.data.accessToken);
     setUser(fetchedUser);
     localStorage.setItem('user_logged_in', 'true');
+
+    // Fetch effective permissions after login
+    await fetchPermissions();
     return result;
   };
 
@@ -149,6 +189,9 @@ export const AuthProvider = ({ children }) => {
 
   const value = {
     user,
+    permissions,
+    refreshPermissions,
+    hasPermission,
     loading,
     login,
     logout,

@@ -25,16 +25,33 @@ class RbacRepository {
 
   async getRolePermissions() {
     const pool = getPool();
+    // Auto-correct any audit_logs rows in database to guarantee can_write = 0
+    await pool.request().query(`
+      UPDATE RolePermissions SET can_write = 0 WHERE module_key = 'audit_logs';
+      UPDATE UserPermissionOverrides SET override_write = 0 WHERE module_key = 'audit_logs';
+    `);
+
     const result = await pool.request().query(`
       SELECT id, role_name, module_key, can_read, can_write, updated_at
       FROM RolePermissions
       ORDER BY role_name ASC, module_key ASC
     `);
-    return result.recordset;
+
+    return result.recordset.map(row => {
+      if (row.module_key === 'audit_logs') {
+        return { ...row, can_write: 0 };
+      }
+      return row;
+    });
   }
 
   async updateRolePermission(roleName, moduleKey, canRead, canWrite) {
     const pool = getPool();
+    // Audit logs module is strictly read-only for ALL roles including Administrator
+    if (moduleKey === 'audit_logs') {
+      canWrite = false;
+    }
+
     await pool.request()
       .input('role', sql.VarChar, roleName)
       .input('module', sql.VarChar, moduleKey)
@@ -62,19 +79,32 @@ class RbacRepository {
       FROM UserPermissionOverrides
       ORDER BY user_id ASC, module_key ASC
     `);
-    return result.recordset;
+
+    return result.recordset.map(row => {
+      if (row.module_key === 'audit_logs') {
+        return { ...row, override_write: 0 };
+      }
+      return row;
+    });
   }
 
   async updateUserOverride(userId, moduleKey, overrideRead, overrideWrite) {
     const pool = getPool();
     
+    // Audit logs module is strictly read-only for ALL users
+    if (moduleKey === 'audit_logs') {
+      overrideWrite = false;
+    }
+
     // If both overrides are null/undefined, delete the override record (revert to role default)
-    if (overrideRead === null && overrideWrite === null) {
-      await pool.request()
-        .input('userId', sql.Int, userId)
-        .input('module', sql.VarChar, moduleKey)
-        .query(`DELETE FROM UserPermissionOverrides WHERE user_id = @userId AND module_key = @module`);
-      return;
+    if (overrideRead === null && (overrideWrite === null || moduleKey === 'audit_logs')) {
+      if (moduleKey === 'audit_logs' && overrideRead === null) {
+        await pool.request()
+          .input('userId', sql.Int, userId)
+          .input('module', sql.VarChar, moduleKey)
+          .query(`DELETE FROM UserPermissionOverrides WHERE user_id = @userId AND module_key = @module`);
+        return;
+      }
     }
 
     await pool.request()
@@ -122,18 +152,66 @@ class RbacRepository {
       `);
 
     if (result.recordset.length === 0) {
-      // Fallback for Administrator if table missing
       if (roleName === 'Administrator') {
-        return { canRead: true, canWrite: true };
+        return { canRead: true, canWrite: moduleKey !== 'audit_logs' };
       }
-      return { canRead: true, canWrite: false };
+      return { canRead: false, canWrite: false };
     }
 
     const row = result.recordset[0];
     const canRead = row.override_read !== null ? Boolean(row.override_read) : Boolean(row.role_read);
-    const canWrite = row.override_write !== null ? Boolean(row.override_write) : Boolean(row.role_write);
+    let canWrite = row.override_write !== null ? Boolean(row.override_write) : Boolean(row.role_write);
+
+    // Audit logs module is strictly read-only for all roles/users
+    if (moduleKey === 'audit_logs') {
+      canWrite = false;
+    }
 
     return { canRead, canWrite };
+  }
+
+  async getUserEffectivePermissionsMap(userId, roleName) {
+    const pool = getPool();
+    const modules = this.getModules();
+
+    const result = await pool.request()
+      .input('userId', sql.Int, userId)
+      .input('role', sql.VarChar, roleName)
+      .query(`
+        SELECT 
+          r.module_key,
+          r.can_read as role_read, 
+          r.can_write as role_write,
+          u.override_read, 
+          u.override_write
+        FROM RolePermissions r
+        LEFT JOIN UserPermissionOverrides u ON u.user_id = @userId AND u.module_key = r.module_key
+        WHERE r.role_name = @role
+      `);
+
+    const map = {};
+
+    // Initialize defaults
+    modules.forEach(m => {
+      if (roleName === 'Administrator') {
+        map[m.key] = { canRead: true, canWrite: m.key !== 'audit_logs' };
+      } else {
+        map[m.key] = { canRead: false, canWrite: false };
+      }
+    });
+
+    result.recordset.forEach(row => {
+      const canRead = row.override_read !== null ? Boolean(row.override_read) : Boolean(row.role_read);
+      let canWrite = row.override_write !== null ? Boolean(row.override_write) : Boolean(row.role_write);
+
+      if (row.module_key === 'audit_logs') {
+        canWrite = false;
+      }
+
+      map[row.module_key] = { canRead, canWrite };
+    });
+
+    return map;
   }
 }
 

@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Settings from './Settings';
 import AccessControl from '../components/AccessControl';
+import AuditLogsView from '../components/AuditLogsView';
 import { 
   FileSpreadsheet, Clock, RefreshCw, ShieldAlert, CheckSquare, BarChart3,
   Users, AlertTriangle, Activity, ArrowRight, Building2, Layers
@@ -261,7 +262,7 @@ const AdminDashboardView = ({ onNavigateTab }) => {
 const Dashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout, user } = useAuth();
+  const { logout, user, hasPermission } = useAuth();
 
   // Navigation and dropdown states
   const [activeTab, setActiveTab] = useState('Dashboard');
@@ -916,6 +917,16 @@ const [unreadCount, setUnreadCount] = useState(0);
             <Reports />
           ) : activeTab === 'Access Control' ? (
             <AccessControl />
+          ) : activeTab === 'Audit Logs' ? (
+            hasPermission('audit_logs', 'read') ? (
+              <AuditLogsView />
+            ) : (
+              <div style={{ padding: '60px 20px', textAlign: 'center', backgroundColor: 'var(--bg-primary)', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                <ShieldAlert size={48} style={{ color: '#EF4444', margin: '0 auto 16px auto' }} />
+                <h2 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)', margin: '0 0 8px 0' }}>Access Denied (HTTP 403)</h2>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>You do not have Read (View) permission for Audit Logs.</p>
+              </div>
+            )
           ) : activeTab === 'Settings' ? (
             <Settings />
           ) : activeTab === 'My Complaints' || activeTab === 'Escalated Complaints' ? (

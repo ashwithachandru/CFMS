@@ -4,11 +4,12 @@ const authMiddleware = require('../middlewares/auth.middleware');
 const upload = require('../middlewares/upload.middleware');
 const ComplaintRepository = require('../repositories/mssql/complaint.repository');
 const { getPool } = require('../config/db');
+const { requirePermission } = require('../middlewares/rbac.middleware');
 const complaintRepo = new ComplaintRepository();
 
 // GET /api/complaints/metadata
 // Returns warehouses, complaint types, and complaint subtypes for form population
-router.get('/metadata', authMiddleware, async (req, res, next) => {
+router.get('/metadata', authMiddleware, requirePermission('complaints', 'read'), async (req, res, next) => {
   try {
     const data = await complaintRepo.getFormMetadata();
     res.status(200).json({
@@ -20,7 +21,7 @@ router.get('/metadata', authMiddleware, async (req, res, next) => {
   }
 });
 // Returns dynamic aggregate counts for Total, Pending, In Progress, Escalated, Completed
-router.get('/stats', authMiddleware, async (req, res, next) => {
+router.get('/stats', authMiddleware, requirePermission('complaints', 'read'), async (req, res, next) => {
   try {
     const userRole = req.user.role;
     const userId = req.user.userId;
@@ -49,7 +50,7 @@ router.get('/stats', authMiddleware, async (req, res, next) => {
 // GET /api/complaints
 // Returns complaint list scoped strictly to user role and assigned warehouse.
 // Accepts optional ?sort=date (default, raised_at DESC) or ?sort=priority (CASE-based ranking)
-router.get('/', authMiddleware, async (req, res, next) => {
+router.get('/', authMiddleware, requirePermission('complaints', 'read'), async (req, res, next) => {
   try {
     const userRole = req.user.role;
     const userId = req.user.userId;
@@ -80,7 +81,7 @@ router.get('/', authMiddleware, async (req, res, next) => {
 });
 
 // GET /api/complaints/:id
-router.get('/:id', authMiddleware, async (req, res, next) => {
+router.get('/:id', authMiddleware, requirePermission('complaints', 'read'), async (req, res, next) => {
   try {
     console.log("BACKEND GET SINGLE COMPLAINT ID:", req.params.id);
     const complaint = await complaintRepo.findById(req.params.id);
@@ -103,7 +104,7 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
 
 // POST /api/complaints
 // Creates a new complaint (Restricted to Sales Executive only)
-router.post('/', authMiddleware, (req, res, next) => {
+router.post('/', authMiddleware, requirePermission('complaints', 'write'), (req, res, next) => {
   if (req.user.role !== 'Sales Executive') {
     return res.status(403).json({
       success: false,
@@ -160,7 +161,7 @@ router.post('/', authMiddleware, (req, res, next) => {
 
 // PUT /api/complaints/:id/status
 // Updates complaint action status (Take Action, Complete, Escalate)
-router.put('/:id/status', authMiddleware, async (req, res, next) => {
+router.put('/:id/status', authMiddleware, requirePermission('complaints', 'write'), async (req, res, next) => {
   try {
     const complaintId = req.params.id;
     const { status, action } = req.body;

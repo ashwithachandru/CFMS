@@ -1,11 +1,11 @@
 import React from 'react';
 import { 
-  Grid, PlusCircle, FileText, Bell, MessageSquare, BarChart3, Settings, LogOut, ShieldCheck
+  Grid, PlusCircle, FileText, Bell, MessageSquare, BarChart3, Settings, LogOut, ShieldCheck, Activity
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const Sidebar = ({ activeTab, setActiveTab, handleLogout, isDesktop, sidebarOpen, onCloseSidebar, unreadMessagesCount }) => {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
 
   const getInitials = () => {
     if (user?.firstName && user?.lastName) {
@@ -42,14 +42,15 @@ const Sidebar = ({ activeTab, setActiveTab, handleLogout, isDesktop, sidebarOpen
     const isAdmin = user?.role === 'Administrator' || user?.role === 'Admin';
 
     const allNavItems = [
-      { name: 'Dashboard', icon: <Grid size={18} /> },
-      { name: 'Raise Complaint', icon: <PlusCircle size={18} />, salesOnly: true },
-      { name: 'My Complaints', icon: <FileText size={18} />, teamOnly: true },
-      { name: 'Escalated Complaints', icon: <FileText size={18} />, managerOnly: true },
+      { name: 'Dashboard', icon: <Grid size={18} />, module: 'dashboard' },
+      { name: 'Raise Complaint', icon: <PlusCircle size={18} />, salesOnly: true, module: 'complaints' },
+      { name: 'My Complaints', icon: <FileText size={18} />, teamOnly: true, module: 'complaints' },
+      { name: 'Escalated Complaints', icon: <FileText size={18} />, managerOnly: true, module: 'complaints' },
       { name: 'Notifications', icon: <Bell size={18} />, badge: unreadMessagesCount, badgeType: 'normal' },
       { name: 'Messages', icon: <MessageSquare size={18} />, badge: unreadMessagesCount, badgeType: 'high' },
-      { name: 'Reports', icon: <BarChart3 size={18} /> },
-      { name: 'Access Control', icon: <ShieldCheck size={18} />, adminOnly: true },
+      { name: 'Reports', icon: <BarChart3 size={18} />, module: 'reports' },
+      { name: 'Audit Logs', icon: <Activity size={18} />, module: 'audit_logs' },
+      { name: 'Access Control', icon: <ShieldCheck size={18} />, adminOnly: true, module: 'docuflow' },
       { name: 'Settings', icon: <Settings size={18} />, adminOnly: true }
     ];
 
@@ -57,7 +58,24 @@ const Sidebar = ({ activeTab, setActiveTab, handleLogout, isDesktop, sidebarOpen
       if (item.salesOnly && !isSalesExec) return false;
       if (item.teamOnly && !isWarehouseTeam) return false;
       if (item.managerOnly && !isWarehouseManager) return false;
+
+      if (item.name === 'Settings') {
+        if (isAdmin) return true;
+        return hasPermission('users', 'read') || 
+               hasPermission('warehouses', 'read') || 
+               hasPermission('categories', 'read') || 
+               hasPermission('sla', 'read');
+      }
+
       if (item.adminOnly && !isAdmin) return false;
+
+      // Module-based RBAC permission check
+      if (item.module && !isAdmin) {
+        if (!hasPermission(item.module, 'read')) {
+          return false;
+        }
+      }
+
       return true;
     });
 

@@ -400,4 +400,21 @@ Below is the SQL Server schema defining the tables and relations:
   - **Backend Layer**: Created `rbac.repository.js` and `rbac.controller.js` providing `/api/admin/rbac/matrix`, `/api/admin/rbac/role-permissions`, `/api/admin/rbac/user-overrides`, and `/api/admin/rbac/user-overrides/:userId`. Built `rbac.middleware.js` providing `requirePermission(moduleKey, action)` which evaluates `user_override ?? role_default ?? false` and returns `HTTP 403 Forbidden` when permission is missing.
   - **Duplicate Test User Purge**: Purged all 5 generated test users (`madurai.team_%` and `verifier.team_%`) from `CustomerFeedbackDB` (User IDs 46, 47, 48, 49, 51) along with their related override and audit entries.
   - **E2E Verification**: Verified Sidebar navigation shift (`rbac_sidebar_main_view.png`), zero remaining duplicate users in Tab 2, SQL Server DB row persistence, backend 403 enforcement, and confirmed 100% login pass rate on the routine 3-account check (`Administrator`, `Sales Executive`, `Warehouse Manager`).
+- **RBAC Permission Propagation Fix & Read-Only Audit Logs System**:
+  - **Permission Propagation Root Cause & Resolution**: Identified that `admin.routes.js` previously executed a router-level `router.use(adminMiddleware)` guard that unconditionally blocked all non-Administrators regardless of `RolePermissions` or `UserPermissionOverrides`. In addition, `Sidebar.jsx` used hardcoded role flags (`adminOnly`, `managerOnly`) rather than checking effective RBAC module permissions, and frontend `AuthContext` did not fetch effective permissions.
+  - **Dynamic Permission Propagation Flow**:
+    1. Created `GET /api/admin/rbac/my-permissions` endpoint returning the user's real-time effective permissions map (`USER_OVERRIDE ?? ROLE_PERMISSION -> EFFECTIVE_PERMISSION`).
+    2. Updated `AuthContext.jsx` to load and expose `permissions`, `refreshPermissions()`, and `hasPermission(moduleKey, action)`.
+    3. Reconfigured `admin.routes.js` to protect operational routes (`/audit-logs`, `/dashboard`, `/users`, `/warehouses`, `/complaint-types`, `/settings`) with granular `requirePermission(moduleKey, 'read'|'write')`.
+    4. Updated `Sidebar.jsx` to dynamically show/hide navigation items (including `Audit Logs`) based on `hasPermission(moduleKey, 'read')`.
+    5. Updated `AccessControl.jsx` to invoke `refreshPermissions()` immediately after saving role or user override updates.
+  - **Read-Only Audit Logs System**:
+    1. Created [`AuditLogsView.jsx`](file:///d:/VII_Sem_Intern/Complaint_Lifecycle_Automation_and_Escalation/frontend/src/components/AuditLogsView.jsx) providing an immutable audit trail view with IST Railway timestamps (`DD/MM/YYYY, HH:MM:SS`), live search, and action filters. Strictly read-only with 0 Edit/Delete buttons.
+    2. Locked the Write (Edit) toggle for `audit_logs` in `AccessControl.jsx` (Tab 1 & Tab 2) to disabled (`canWrite: false`) with a `"Read-Only"` badge.
+    3. Enforced `canWrite: false` for `audit_logs` in `rbac.repository.js`.
+  - **E2E Verification**: Ran automated Playwright test suite [`verify_rbac_propagation.js`](file:///d:/VII_Sem_Intern/Complaint_Lifecycle_Automation_and_Escalation/backend/scratch/verify_rbac_propagation.js) verifying:
+    - TEST 1 (Grant): DB `can_read = 1`, `Audit Logs` appears in Warehouse Manager sidebar, table renders with 0 edit buttons (`test1_manager_audit_logs_view.png`).
+    - TEST 2 (Revoke): DB `can_read = 0`, `Audit Logs` disappears from Sidebar, direct API call `GET /api/admin/audit-logs` returns `HTTP 403 Forbidden`.
+    - TEST 3 (User Override): User override for Salem manager (`override_read = 1`) grants access to Salem manager while Erode manager remains restricted (`can_read = 0`).
+  - **Routine Auth Check**: Verified 100% login pass rate for `admin1@ramrajcotton.com`, `arun.sales@ramrajcotton.com`, and `wh_salem@ramrajcotton.com`.
 

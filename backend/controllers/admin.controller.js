@@ -329,6 +329,18 @@ class AdminController {
       return res.status(500).json({ success: false, message: err.message });
     }
   }
+
+  // Audit Logs inspection
+  async getAuditLogs(req, res) {
+    try {
+      const limit = parseInt(req.query.limit) || 100;
+      const logs = await auditRepository.findRecent(limit);
+      return res.json({ success: true, data: logs });
+    } catch (err) {
+      console.error('Error fetching audit logs:', err);
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  }
 }
 
 module.exports = new AdminController();
