@@ -60,7 +60,15 @@ function App() {
       <Route 
         path="/raise-complaint" 
         element={
-          <ProtectedRoute allowedRoles={['Sales Executive']}>
+          <ProtectedRoute>
+            <RaiseComplaint />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/complaints" 
+        element={
+          <ProtectedRoute>
             <RaiseComplaint />
           </ProtectedRoute>
         } 

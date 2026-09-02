@@ -293,6 +293,7 @@ const Dashboard = () => {
 
   // Filters State
   const [selectedStatus, setSelectedStatus] = useState('All');
+  const [submissionSource, setSubmissionSource] = useState('All');
   const [selectedDept, setSelectedDept] = useState('All');
   const [selectedPriority, setSelectedPriority] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -552,6 +553,8 @@ const [unreadCount, setUnreadCount] = useState(0);
 
   // Filter complaints based on selection
   const filteredComplaints = displayComplaints.filter(c => {
+    if (submissionSource === 'ocr' && !(c.submission_type === 'ocr' || c.invoice_url)) return false;
+    if (submissionSource === 'manual' && (c.submission_type === 'ocr' || c.invoice_url)) return false;
     if (selectedStatus === 'Pending' && !(c.status === 'Pending' || c.status === 'Assigned' || c.status === 'New')) return false;
     if (selectedStatus === 'In Progress' && c.status !== 'In Progress') return false;
     if (selectedStatus === 'Escalated' && !(c.status === 'Escalated' || c.status === 'Escalated to Manager' || c.status === 'Escalated to Warehouse Head' || (c.sla && (c.sla.includes('Expired') || c.sla.includes('!')) && c.status !== 'Resolved' && c.status !== 'Completed'))) return false;
@@ -929,7 +932,7 @@ const [unreadCount, setUnreadCount] = useState(0);
             )
           ) : activeTab === 'Settings' ? (
             <Settings />
-          ) : activeTab === 'My Complaints' || activeTab === 'Escalated Complaints' ? (
+          ) : activeTab === 'My Complaints' || activeTab === 'Escalated Complaints' || activeTab === 'All Complaints' ? (
             <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
               {/* Header */}
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
@@ -940,8 +943,10 @@ const [unreadCount, setUnreadCount] = useState(0);
                   <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '6px' }}>
                     {activeTab === 'My Complaints' ? (
                       'Your claimed complaints requiring resolution.'
-                    ) : (
+                    ) : activeTab === 'Escalated Complaints' ? (
                       'Historical and active escalated complaints requiring manager attention.'
+                    ) : (
+                      'Organization-wide complaint management, filters, and invoice documents.'
                     )}
                   </p>
                 </div>
@@ -975,6 +980,8 @@ const [unreadCount, setUnreadCount] = useState(0);
                   setSortBy={setSortBy}
                   selectedDept={selectedDept}
                   setSelectedDept={setSelectedDept}
+                  submissionSource={submissionSource}
+                  setSubmissionSource={setSubmissionSource}
                   categories={categories}
                 />
               </div>
@@ -1053,6 +1060,8 @@ const [unreadCount, setUnreadCount] = useState(0);
               setSortBy={setSortBy}
               selectedDept={selectedDept}
               setSelectedDept={setSelectedDept}
+              submissionSource={submissionSource}
+              setSubmissionSource={setSubmissionSource}
               categories={categories}
             />
           </div>

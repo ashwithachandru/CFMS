@@ -46,6 +46,7 @@ const Sidebar = ({ activeTab, setActiveTab, handleLogout, isDesktop, sidebarOpen
       { name: 'Raise Complaint', icon: <PlusCircle size={18} />, salesOnly: true, module: 'complaints' },
       { name: 'My Complaints', icon: <FileText size={18} />, teamOnly: true, module: 'complaints' },
       { name: 'Escalated Complaints', icon: <FileText size={18} />, managerOnly: true, module: 'complaints' },
+      { name: 'All Complaints', icon: <FileText size={18} />, adminOnly: true, module: 'complaints' },
       { name: 'Notifications', icon: <Bell size={18} />, badge: unreadMessagesCount, badgeType: 'normal' },
       { name: 'Messages', icon: <MessageSquare size={18} />, badge: unreadMessagesCount, badgeType: 'high' },
       { name: 'Reports', icon: <BarChart3 size={18} />, module: 'reports' },

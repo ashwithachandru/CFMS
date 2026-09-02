@@ -69,6 +69,7 @@ BEGIN
         complaint_subtype_id INT FOREIGN KEY REFERENCES ComplaintSubtypes(id) NULL,
         description NVARCHAR(MAX) NOT NULL,
         attachment_url VARCHAR(500) NULL,
+        invoice_url VARCHAR(500) NULL,
         status VARCHAR(50) NOT NULL DEFAULT 'New', -- 'New', 'Assigned', 'In Progress', 'Escalated to Manager', 'Escalated to Warehouse Head', 'Resolved', 'Closed'
         assigned_warehouse_team_id INT FOREIGN KEY REFERENCES Users(id) NULL,
         taken_action_by INT FOREIGN KEY REFERENCES Users(id) NULL,
@@ -137,4 +138,15 @@ IF NOT EXISTS (
 BEGIN
     ALTER TABLE Complaints 
     ADD taken_action_by INT FOREIGN KEY REFERENCES Users(id) NULL;
+END;
+
+-- Migration to add invoice_url to Complaints table if it doesn't exist
+IF NOT EXISTS (
+    SELECT * FROM sys.columns 
+    WHERE object_id = OBJECT_ID(N'[dbo].[Complaints]') 
+      AND name = N'invoice_url'
+)
+BEGIN
+    ALTER TABLE Complaints 
+    ADD invoice_url VARCHAR(500) NULL;
 END;

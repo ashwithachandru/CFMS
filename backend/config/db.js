@@ -10,10 +10,13 @@ const baseConfig = {
   password: process.env.DB_PASSWORD,
   server: process.env.DB_SERVER,
   port: process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : undefined,
+  requestTimeout: 30000,
+  connectionTimeout: 30000,
   options: {
     instanceName: process.env.DB_INSTANCE || undefined,
     encrypt: true, // required for local SQL Server 2022 TLS handshake
     trustServerCertificate: true,
+    requestTimeout: 30000
   }
 };
 
@@ -24,7 +27,7 @@ function getDynamicSqlPorts() {
     if (!isNaN(envPort)) candidatePorts.push(envPort);
   }
   try {
-    const cmd = 'powershell -Command "Get-NetTCPConnection -State Listen | Where-Object { $_.OwningProcess -eq (Get-Process -Name sqlservr).Id } | Select-Object -ExpandProperty LocalPort"';
+    const cmd = 'powershell -Command "Get-NetTCPConnection -State Listen -OwningProcess (Get-Process sqlservr).Id | Select-Object -ExpandProperty LocalPort"';
     const output = execSync(cmd).toString().trim();
     if (output) {
       const ports = output.split(/\r?\n/).map(p => parseInt(p.trim(), 10)).filter(p => !isNaN(p));

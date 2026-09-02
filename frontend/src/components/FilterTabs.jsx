@@ -8,6 +8,8 @@ const FilterTabs = ({
   setSortBy, 
   selectedDept, 
   setSelectedDept, 
+  submissionSource = 'All',
+  setSubmissionSource = () => {},
   categories = []
 }) => {
   const defaultCategoryNames = [
@@ -32,7 +34,7 @@ const FilterTabs = ({
         justifyContent: 'flex-end', 
         alignItems: 'center',
         flexWrap: 'wrap', 
-        gap: '16px',
+        gap: '12px',
         width: '100%',
         userSelect: 'none',
         boxSizing: 'border-box',
@@ -50,7 +52,21 @@ const FilterTabs = ({
           justifyContent: 'flex-end'
         }}
       >
-        {/* Dropdown 1: Sort by */}
+        {/* Dropdown 1: Submission Source */}
+        <CustomSelect 
+          label="Flow Source:"
+          value={submissionSource}
+          onChange={setSubmissionSource}
+          align="left"
+          style={{ minWidth: '220px' }}
+          options={[
+            { value: 'All', label: 'All Submission Methods' },
+            { value: 'ocr', label: 'See Invoice Complaints' },
+            { value: 'manual', label: 'See Manually Raised Complaints' }
+          ]}
+        />
+
+        {/* Dropdown 2: Sort by */}
         <CustomSelect 
           label="Sort by:"
           value={sortBy}
@@ -65,7 +81,7 @@ const FilterTabs = ({
           ]}
         />
 
-        {/* Dropdown 2: Category */}
+        {/* Dropdown 3: Category */}
         <CustomSelect 
           label="Category:"
           value={selectedDept}
@@ -78,7 +94,7 @@ const FilterTabs = ({
           ]}
         />
 
-        {/* Dropdown 3: Status */}
+        {/* Dropdown 4: Status */}
         <CustomSelect 
           label="Status:"
           value={selectedStatus}

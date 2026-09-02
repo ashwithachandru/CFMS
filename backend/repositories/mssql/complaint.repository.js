@@ -105,25 +105,27 @@ class ComplaintRepository {
     const insertRes = await pool.request()
       .input('complaint_number', sql.VarChar, complaintNumber)
       .input('sales_executive_id', sql.Int, data.sales_executive_id)
-      .input('warehouse_id', sql.Int, data.warehouse_id)
+      .input('warehouse_id', sql.Int, data.warehouse_id ? parseInt(data.warehouse_id, 10) : null)
       .input('customer_code', sql.VarChar, data.customer_code)
       .input('invoice_number', sql.VarChar, data.invoice_number)
       .input('complaint_type_id', sql.Int, data.complaint_type_id)
       .input('complaint_subtype_id', sql.Int, data.complaint_subtype_id || null)
       .input('description', sql.NVarChar, data.description)
       .input('attachment_url', sql.VarChar, data.attachment_url || null)
+      .input('invoice_url', sql.VarChar, data.invoice_url || null)
+      .input('submission_type', sql.VarChar, data.submission_type || (data.invoice_url ? 'ocr' : 'manual'))
       .input('assigned_team_id', sql.Int, assignedTeamId)
       .input('sla_hours', sql.Int, slaWindowHours)
       .query(`
         INSERT INTO Complaints (
           complaint_number, sales_executive_id, warehouse_id, customer_code, invoice_number, 
-          complaint_type_id, complaint_subtype_id, description, attachment_url, status, 
+          complaint_type_id, complaint_subtype_id, description, attachment_url, invoice_url, submission_type, status, 
           assigned_warehouse_team_id, raised_at, warehouse_team_deadline
         )
         OUTPUT INSERTED.id, INSERTED.complaint_number
         VALUES (
           @complaint_number, @sales_executive_id, @warehouse_id, @customer_code, @invoice_number, 
-          @complaint_type_id, @complaint_subtype_id, @description, @attachment_url, 'Assigned', 
+          @complaint_type_id, @complaint_subtype_id, @description, @attachment_url, @invoice_url, @submission_type, 'Assigned', 
           @assigned_team_id, GETDATE(), DATEADD(hour, @sla_hours, GETDATE())
         )
       `);
@@ -196,16 +198,28 @@ class ComplaintRepository {
 
     let whereClause = 'WHERE 1=1';
 
-    // Role-based data scoping (Enforces exact Visibility Matrix)
+    // Role-based data scoping (Enforces exact Visibility Matrix & Global Shared Invoice Queue)
     if (userRole === 'Sales Executive') {
       whereClause += ` AND c.sales_executive_id = ${parseInt(userId, 10)} AND c.status <> 'Closed'`;
     } else if (userRole === 'Warehouse Team') {
-      whereClause += ` AND c.warehouse_id = ${parseInt(warehouseId || 0, 10)} AND c.status <> 'Closed'`;
+      // Visible for their warehouse, plus the shared global pool of invoice complaints
+      whereClause += ` AND (c.warehouse_id = ${parseInt(warehouseId || 0, 10)} OR c.warehouse_id IS NULL OR c.submission_type = 'ocr') AND c.status <> 'Closed'`;
     } else if (userRole === 'Warehouse Manager') {
+      // Visible for their warehouse escalated complaints, escalated invoice complaints actioned by their team, plus shared global invoice complaints
       if (history) {
-        whereClause += ` AND c.warehouse_id = ${parseInt(warehouseId || 0, 10)} AND c.escalated_to_manager_at IS NOT NULL AND c.status <> 'Closed'`;
+        whereClause += ` AND (
+          (c.warehouse_id = ${parseInt(warehouseId || 0, 10)} AND c.escalated_to_manager_at IS NOT NULL)
+          OR (c.warehouse_id IS NULL AND c.taken_action_by IN (SELECT id FROM Users WHERE warehouse_id = ${parseInt(warehouseId || 0, 10)}) AND c.escalated_to_manager_at IS NOT NULL)
+          OR c.warehouse_id IS NULL 
+          OR c.submission_type = 'ocr'
+        ) AND c.status <> 'Closed'`;
       } else {
-        whereClause += ` AND c.warehouse_id = ${parseInt(warehouseId || 0, 10)} AND c.escalated_to_manager_at IS NOT NULL AND c.status NOT IN ('Resolved', 'Completed', 'Closed')`;
+        whereClause += ` AND (
+          (c.warehouse_id = ${parseInt(warehouseId || 0, 10)} AND c.escalated_to_manager_at IS NOT NULL AND c.status NOT IN ('Resolved', 'Completed', 'Closed'))
+          OR (c.warehouse_id IS NULL AND c.taken_action_by IN (SELECT id FROM Users WHERE warehouse_id = ${parseInt(warehouseId || 0, 10)}) AND c.escalated_to_manager_at IS NOT NULL AND c.status NOT IN ('Resolved', 'Completed', 'Closed'))
+          OR c.warehouse_id IS NULL 
+          OR c.submission_type = 'ocr'
+        ) AND c.status <> 'Closed'`;
       }
     }
 
@@ -243,14 +257,21 @@ class ComplaintRepository {
         CONVERT(VARCHAR(20), c.raised_at, 106) AS date,
         CONVERT(VARCHAR(30), c.raised_at, 126) AS raised_at_iso,
         c.status,
-        w.name AS warehouse_name,
+        ISNULL(w.name, 'Global / Shared Queue') AS warehouse_name,
+        c.warehouse_id,
         c.attachment_url,
+        c.invoice_url,
+        c.submission_type,
         (CASE WHEN c.attachment_url IS NOT NULL THEN 1 ELSE 0 END) AS attach,
         DATEDIFF(hour, GETDATE(), c.warehouse_team_deadline) AS hours_left,
-        c.taken_action_by
+        c.taken_action_by,
+        (u_actor.first_name + ' ' + u_actor.last_name) AS actor_name,
+        w_actor.name AS actor_warehouse_name
       FROM Complaints c
       JOIN Users u_sales ON c.sales_executive_id = u_sales.id
-      JOIN Warehouses w ON c.warehouse_id = w.id
+      LEFT JOIN Warehouses w ON c.warehouse_id = w.id
+      LEFT JOIN Users u_actor ON c.taken_action_by = u_actor.id
+      LEFT JOIN Warehouses w_actor ON u_actor.warehouse_id = w_actor.id
       JOIN ComplaintTypes ct ON c.complaint_type_id = ct.id
       LEFT JOIN ComplaintSubtypes cs ON c.complaint_subtype_id = cs.id
       ${whereClause}
@@ -281,6 +302,7 @@ class ComplaintRepository {
 
       return {
         id: row.id_display,
+        numeric_id: row.id,
         customer: row.customer,
         invoice: row.invoice,
         type: row.type,
@@ -292,11 +314,17 @@ class ComplaintRepository {
         hours_left: isResolved ? 999 : row.hours_left,
         status: row.status,
         priority: priorityLabel,
-        department: row.warehouse_name, // Warehouse name — used in table column
+        department: row.warehouse_name,
         warehouse_name: row.warehouse_name,
+        warehouse: row.warehouse_name,
+        warehouse_id: row.warehouse_id,
         attach: Boolean(row.attach),
         attachment_url: row.attachment_url,
-        taken_action_by: row.taken_action_by
+        invoice_url: row.invoice_url,
+        submission_type: row.submission_type || (row.invoice_url ? 'ocr' : 'manual'),
+        taken_action_by: row.taken_action_by,
+        actor_name: row.actor_name,
+        actor_warehouse_name: row.actor_warehouse_name
       };
     });
   }
@@ -348,7 +376,7 @@ class ComplaintRepository {
         UPDATE Complaints 
         SET status = @new_status,
             updated_at = GETDATE(),
-            taken_action_by = (CASE WHEN @new_status = 'In Progress' THEN @user_id ELSE taken_action_by END),
+            taken_action_by = (CASE WHEN @new_status = 'In Progress' THEN @user_id ELSE ISNULL(taken_action_by, @user_id) END),
             warehouse_team_responded_at = (CASE WHEN @new_status = 'In Progress' THEN ISNULL(warehouse_team_responded_at, GETDATE()) ELSE warehouse_team_responded_at END),
             escalated_to_manager_at = (CASE WHEN @new_status LIKE '%Escalated%' THEN ISNULL(escalated_to_manager_at, GETDATE()) ELSE escalated_to_manager_at END)
         WHERE id = @id
@@ -464,15 +492,17 @@ class ComplaintRepository {
           CONVERT(VARCHAR(20), c.raised_at, 106) AS date,
           CONVERT(VARCHAR(30), c.raised_at, 126) AS raised_at_iso,
           c.status,
-          w.name AS warehouse_name,
+          ISNULL(w.name, 'Global / Shared Queue') AS warehouse_name,
           c.attachment_url,
+          c.invoice_url,
+          c.submission_type,
           DATEDIFF(hour, GETDATE(), c.warehouse_team_deadline) AS hours_left,
           c.taken_action_by,
           c.sales_executive_id,
           c.warehouse_id
         FROM Complaints c
         JOIN Users u_sales ON c.sales_executive_id = u_sales.id
-        JOIN Warehouses w ON c.warehouse_id = w.id
+        LEFT JOIN Warehouses w ON c.warehouse_id = w.id
         JOIN ComplaintTypes ct ON c.complaint_type_id = ct.id
         LEFT JOIN ComplaintSubtypes cs ON c.complaint_subtype_id = cs.id
         WHERE c.complaint_number = @id OR CAST(c.id AS VARCHAR) = @id
@@ -514,6 +544,8 @@ class ComplaintRepository {
       status: row.status,
       priority: priorityLabel,
       department: row.warehouse_name,
+      attachment_url: row.attachment_url,
+      invoice_url: row.invoice_url,
       taken_action_by: row.taken_action_by,
       sales_executive_id: row.sales_executive_id,
       warehouse_id: row.warehouse_id
@@ -532,14 +564,19 @@ class ComplaintRepository {
             c.customer_code,
             c.invoice_number,
             c.warehouse_id,
+            c.taken_action_by,
             c.sales_executive_id,
-            w.name AS warehouse_name,
+            ISNULL(w.name, 'Global / Shared Queue') AS warehouse_name,
+            u_actor.warehouse_id AS actor_warehouse_id,
+            w_actor.name AS actor_warehouse_name,
             ct.name AS complaint_type,
             cs.name AS complaint_subtype,
             (u_sales.first_name + ' ' + u_sales.last_name) AS sales_executive_name,
             u_sales.email AS sales_executive_email
           FROM Complaints c
-          JOIN Warehouses w ON c.warehouse_id = w.id
+          LEFT JOIN Warehouses w ON c.warehouse_id = w.id
+          LEFT JOIN Users u_actor ON c.taken_action_by = u_actor.id
+          LEFT JOIN Warehouses w_actor ON u_actor.warehouse_id = w_actor.id
           JOIN ComplaintTypes ct ON c.complaint_type_id = ct.id
           LEFT JOIN ComplaintSubtypes cs ON c.complaint_subtype_id = cs.id
           JOIN Users u_sales ON c.sales_executive_id = u_sales.id
@@ -549,17 +586,30 @@ class ComplaintRepository {
       if (res.recordset.length === 0) return null;
       const row = res.recordset[0];
 
-      // Query ALL active Warehouse Managers for this complaint's warehouse_id
-      const managersRes = await pool.request()
-        .input('warehouse_id', sql.Int, row.warehouse_id)
-        .query(`
+      // If warehouse_id is unset (unassigned invoice complaint), route escalation to actor's warehouse manager
+      const targetWarehouseId = row.warehouse_id || row.actor_warehouse_id;
+      const targetWarehouseName = row.warehouse_name !== 'Global / Shared Queue' ? row.warehouse_name : (row.actor_warehouse_name || 'Global Shared Queue');
+
+      let managersRes;
+      if (targetWarehouseId) {
+        managersRes = await pool.request()
+          .input('warehouse_id', sql.Int, targetWarehouseId)
+          .query(`
+            SELECT email, (first_name + ' ' + last_name) AS manager_name
+            FROM Users
+            WHERE role = 'Warehouse Manager' 
+              AND warehouse_id = @warehouse_id 
+              AND status = 'Active'
+            ORDER BY id DESC
+          `);
+      } else {
+        managersRes = await pool.request().query(`
           SELECT email, (first_name + ' ' + last_name) AS manager_name
           FROM Users
-          WHERE role = 'Warehouse Manager' 
-            AND warehouse_id = @warehouse_id 
-            AND status = 'Active'
+          WHERE role = 'Warehouse Manager' AND status = 'Active'
           ORDER BY id DESC
         `);
+      }
 
       const managerEmails = managersRes.recordset.map(m => m.email).filter(Boolean);
       const managerNames = managersRes.recordset.map(m => m.manager_name).filter(Boolean).join(', ');
@@ -569,8 +619,8 @@ class ComplaintRepository {
         complaintNumber: row.complaint_number,
         customerCode: row.customer_code,
         invoiceNumber: row.invoice_number,
-        warehouseId: row.warehouse_id,
-        warehouseName: row.warehouse_name,
+        warehouseId: targetWarehouseId,
+        warehouseName: targetWarehouseName,
         salesExecutiveId: row.sales_executive_id,
         salesExecutiveName: row.sales_executive_name,
         salesExecutiveEmail: row.sales_executive_email,

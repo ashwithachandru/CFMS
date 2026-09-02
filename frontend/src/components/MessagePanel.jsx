@@ -1,9 +1,11 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { MessageSquare, X, Send, Paperclip, Users, ImageOff } from 'lucide-react';
+import { MessageSquare, X, Send, Paperclip, Users, ImageOff, FileText, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import Button from './common/Button';
 import CustomSelect from './common/CustomSelect';
+import InvoiceModal from './common/InvoiceModal';
 import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 const MessagePanel = ({ 
   replyToComplaint, 
@@ -20,7 +22,9 @@ const MessagePanel = ({
   setSelectedRecipient,
   preselectedRecipientId
 }) => {
+  const { user } = useAuth();
   const scrollRef = useRef(null);
+  const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
   const fileInputRef = useRef(null);
   const shouldReduceMotion = useReducedMotion();
   const [fileError, setFileError] = useState('');
@@ -143,6 +147,8 @@ const MessagePanel = ({
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const canViewInvoice = replyToComplaint?.invoice_url && ['Warehouse Team', 'Warehouse Manager', 'Administrator'].includes(user?.role);
+
   return (
     <AnimatePresence>
       <div 
@@ -213,15 +219,43 @@ const MessagePanel = ({
             style={{ 
               display: 'flex', 
               alignItems: 'center', 
+              justifyContent: 'space-between',
               gap: '8px', 
               fontSize: '13px', 
               fontWeight: 'bold', 
               color: 'var(--text-primary)', 
-              userSelect: 'none' 
+              userSelect: 'none',
+              paddingRight: '28px'
             }}
           >
-            <MessageSquare size={16} style={{ color: 'var(--brand-primary)' }} />
-            <span>{replyToComplaint.id === 'DIRECT' ? 'Direct Messaging Thread' : `Complaint Messaging Thread — ${replyToComplaint.id} (${replyToComplaint.customer})`}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <MessageSquare size={16} style={{ color: 'var(--brand-primary)' }} />
+              <span>{replyToComplaint.id === 'DIRECT' ? 'Direct Messaging Thread' : `Complaint Messaging Thread — ${replyToComplaint.id} (${replyToComplaint.customer})`}</span>
+            </div>
+
+            {canViewInvoice && (
+              <button
+                type="button"
+                onClick={() => setInvoiceModalOpen(true)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  color: 'var(--brand-primary)',
+                  backgroundColor: 'var(--bg-secondary)',
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                  cursor: 'pointer'
+                }}
+                title="Click to view invoice document in popup modal"
+              >
+                <FileText size={14} />
+                <span>Click to View Invoice</span>
+              </button>
+            )}
           </div>
 
           {/* Dynamic Recipient Selector Bar */}
@@ -424,6 +458,17 @@ const MessagePanel = ({
           </Button>
         </form>
       </motion.section>
+
+      {/* Invoice Popup Modal */}
+      {replyToComplaint && (
+        <InvoiceModal 
+          isOpen={invoiceModalOpen}
+          onClose={() => setInvoiceModalOpen(false)}
+          imageUrl={replyToComplaint.invoice_url}
+          title={`Invoice Document — ${replyToComplaint.id} (${replyToComplaint.customer || ''})`}
+          fileName={replyToComplaint.invoice || ''}
+        />
+      )}
       </div>
     </AnimatePresence>
   );

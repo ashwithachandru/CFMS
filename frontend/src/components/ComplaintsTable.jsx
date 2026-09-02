@@ -3,6 +3,7 @@ import { Clock, Paperclip, ChevronLeft, ChevronRight, Inbox } from 'lucide-react
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import Badge from './common/Badge';
 import Button from './common/Button';
+import InvoiceModal from './common/InvoiceModal';
 import { TableSkeleton } from './common/SkeletonLoader';
 import { useAuth } from '../context/AuthContext';
 
@@ -23,6 +24,14 @@ const ComplaintsTable = ({
   const pageSize = 5;
   const totalPages = Math.ceil(complaints.length / pageSize) || 1;
   const pageComplaints = complaints.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  // Invoice popup modal state
+  const [activeInvoiceModal, setActiveInvoiceModal] = useState({
+    isOpen: false,
+    imageUrl: '',
+    title: '',
+    fileName: ''
+  });
 
   const renderActions = (comp) => {
     const isCompleted = comp.status === 'Completed' || comp.status === 'Resolved';
@@ -255,7 +264,36 @@ const ComplaintsTable = ({
                   <span style={{ fontWeight: 'bold', color: 'var(--brand-primary)', fontSize: '14px' }}>{comp.id}</span>
                   {renderStatusBadge(comp)}
                 </div>
-                <div style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 'bold' }}>{comp.customer} • {comp.invoice}</div>
+                <div style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 'bold' }}>
+                  {comp.customer} • {comp.invoice}
+                  {comp.invoice_url && ['Warehouse Team', 'Warehouse Manager', 'Administrator'].includes(user?.role) && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveInvoiceModal({
+                          isOpen: true,
+                          imageUrl: comp.invoice_url,
+                          title: `Invoice Document — ${comp.id} (${comp.customer})`,
+                          fileName: comp.invoice || ''
+                        });
+                      }}
+                      style={{
+                        marginLeft: '8px',
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        color: 'var(--brand-primary)',
+                        textDecoration: 'underline',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      (View Invoice)
+                    </button>
+                  )}
+                </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
                   <Badge color={getBadgeColorForCategory(comp.type)}>{comp.type} - {comp.subtype}</Badge>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: slaColor, fontSize: '12px', fontWeight: 'bold' }}>
@@ -277,13 +315,13 @@ const ComplaintsTable = ({
   return (
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '16px', boxSizing: 'border-box' }}>
       <div style={{ width: '100%', overflowX: 'auto', borderRadius: '12px', border: '1px solid var(--border-color)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', backgroundColor: 'var(--bg-primary)' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '1080px', tableLayout: 'fixed' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '1140px', tableLayout: 'fixed' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               <th style={{ padding: '14px 10px', width: '95px', minWidth: '95px', boxSizing: 'border-box', textAlign: 'left' }}>Complaint ID</th>
               <th style={{ padding: '14px 10px', width: '110px', minWidth: '110px', boxSizing: 'border-box', textAlign: 'left' }}>Customer</th>
               <th style={{ padding: '14px 10px', width: '110px', minWidth: '110px', boxSizing: 'border-box', textAlign: 'left' }}>Invoice #</th>
-              <th style={{ padding: '14px 10px', width: '140px', minWidth: '140px', boxSizing: 'border-box', textAlign: 'left' }}>Category</th>
+              <th style={{ padding: '14px 10px', width: '180px', minWidth: '180px', boxSizing: 'border-box', textAlign: 'left' }}>Category</th>
               <th style={{ padding: '14px 10px', width: '110px', minWidth: '110px', boxSizing: 'border-box', textAlign: 'left' }}>Raised By</th>
               <th style={{ padding: '14px 10px', width: '110px', minWidth: '110px', boxSizing: 'border-box', textAlign: 'left' }}>Warehouse</th>
               <th style={{ padding: '14px 10px', width: '80px', minWidth: '80px', boxSizing: 'border-box', textAlign: 'left' }}>SLA Timer</th>
@@ -347,13 +385,65 @@ const ComplaintsTable = ({
                     </td>
 
                     <td style={{ padding: '12px 10px', width: '110px', minWidth: '110px', boxSizing: 'border-box', textAlign: 'left', fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 'normal' }}>
-                      {comp.invoice}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{comp.invoice}</span>
+                        {comp.invoice_url && ['Warehouse Team', 'Warehouse Manager', 'Administrator'].includes(user?.role) && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveInvoiceModal({
+                                isOpen: true,
+                                imageUrl: comp.invoice_url,
+                                title: `Invoice Document — ${comp.id} (${comp.customer})`,
+                                fileName: comp.invoice || ''
+                              });
+                            }}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              padding: 0,
+                              fontSize: '11px',
+                              fontWeight: 'bold',
+                              color: 'var(--brand-primary)',
+                              textDecoration: 'underline',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              cursor: 'pointer'
+                            }}
+                            title="Click to view stored invoice document in popup modal"
+                          >
+                            <span>Click to View Invoice</span>
+                          </button>
+                        )}
+                      </div>
                     </td>
 
-                    <td style={{ padding: '12px 10px', width: '140px', minWidth: '140px', boxSizing: 'border-box', textAlign: 'left' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <Badge color={getBadgeColorForCategory(comp.type)}>{comp.type}</Badge>
-                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 'normal' }}>{comp.subtype}</span>
+                    <td style={{ padding: '12px 10px', width: '180px', minWidth: '180px', boxSizing: 'border-box', textAlign: 'left', overflow: 'hidden' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        <div>
+                          <Badge color={getBadgeColorForCategory(comp.type)}>{comp.type}</Badge>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ 
+                            fontSize: '10px', 
+                            padding: '2px 6px', 
+                            borderRadius: '4px', 
+                            backgroundColor: (comp.submission_type === 'ocr' || comp.invoice_url) ? 'rgba(37, 99, 235, 0.1)' : 'rgba(100, 116, 139, 0.1)', 
+                            color: (comp.submission_type === 'ocr' || comp.invoice_url) ? '#2563eb' : '#64748b', 
+                            fontWeight: '600',
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0
+                          }}>
+                            {(comp.submission_type === 'ocr' || comp.invoice_url) ? 'Invoice OCR' : 'Manual'}
+                          </span>
+                          {comp.subtype && (
+                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 'normal', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {comp.subtype}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </td>
 
@@ -508,6 +598,15 @@ const ComplaintsTable = ({
           </button>
         </div>
       </div>
+
+      {/* Invoice Popup Modal */}
+      <InvoiceModal
+        isOpen={activeInvoiceModal.isOpen}
+        onClose={() => setActiveInvoiceModal(prev => ({ ...prev, isOpen: false }))}
+        imageUrl={activeInvoiceModal.imageUrl}
+        title={activeInvoiceModal.title}
+        fileName={activeInvoiceModal.fileName}
+      />
     </div>
   );
 };
