@@ -59,6 +59,9 @@ Below is the SQL Server schema defining the tables and relations:
 - `status` (VARCHAR(50), default: `'New'`, NOT NULL) — Options: `'New'`, `'Assigned'`, `'In Progress'`, `'Escalated to Manager'`, `'Escalated to Warehouse Head'`, `'Resolved'`, `'Closed'`
 - `assigned_warehouse_team_id` (INT, FK to `Users(id)`, NULL)
 - `taken_action_by` (INT, FK to `Users(id)`, NULL) — *Added in Step 3*
+- `invoice_url` (VARCHAR(500), NULL)
+- `ocr_text` (NVARCHAR(MAX), NULL) — *Stores raw extracted OCR text*
+- `submission_type` (VARCHAR(20), default: `'manual'`, NULL) — Options: `'manual'`, `'ocr'`
 - `raised_at` (DATETIME, default: GETDATE())
 - `warehouse_team_deadline` (DATETIME, NULL)
 - `warehouse_team_responded_at` (DATETIME, NULL)
@@ -418,3 +421,17 @@ Below is the SQL Server schema defining the tables and relations:
     - TEST 3 (User Override): User override for Salem manager (`override_read = 1`) grants access to Salem manager while Erode manager remains restricted (`can_read = 0`).
   - **Routine Auth Check**: Verified 100% login pass rate for `admin1@ramrajcotton.com`, `arun.sales@ramrajcotton.com`, and `wh_salem@ramrajcotton.com`.
 
+### 2026-09-02
+- **Invoice OCR Extracted Text Visibility Extension & Warehouse Scoping Enforcement**:
+  - **Extracted Text Storage & DB Schema Migration**: Added `ocr_text NVARCHAR(MAX) NULL` column to `Complaints` table in `backend/database/schema.sql` and MSSQL database. Backfilled OCR extracted text for all existing complaints with stored invoice documents (`CMP-0020` through `CMP-0041`).
+  - **Backend Layer**: Updated `complaint.repository.js` (`create`, `findAll`, `findById`) and `complaint.routes.js` (`POST /complaints`) to store and return `ocr_text`.
+  - **Shared Modal Viewer (`InvoiceModal.jsx`)**: Enhanced the existing modal component with tabbed switching between `[🖼️ Invoice Image]` and `[📄 Extracted OCR Text]`. OCR view displays the raw structured text in monospace pre-formatted styling with a 1-click "Copy Text" button.
+  - **Complaints Table Visibility (`ComplaintsTable.jsx`)**: Added the "Click to View Invoice" trigger under the Invoice column for `Warehouse Team`, `Warehouse Manager`, `Sales Executive`, and `Administrator` on any complaint with an invoice document or OCR text.
+  - **Warehouse Scoping & RBAC Governance**:
+    - Scoping is strictly preserved: Warehouse Team and Manager members only access complaints belonging to their own warehouse (`c.warehouse_id = @warehouseId`) or the unassigned shared queue (`c.warehouse_id IS NULL`). Confirmed Tirupur-owned complaints are strictly hidden from Salem warehouse members.
+    - Governed by RBAC: Checked `hasPermission('complaints', 'read')` in UI and `requirePermission('complaints', 'read')` in backend API. Confirmed revocation of read permission returns HTTP 403 Forbidden.
+  - **Real Evidence Verification**:
+    - Captured screenshot `warehouse_team_ocr_view.png` (Raja K., Tirupur Warehouse Team).
+    - Captured screenshot `warehouse_manager_ocr_view.png` (Salem Manager, Salem Warehouse).
+    - Captured screenshot `sales_executive_ocr_view.png` (Arun M., Sales Executive).
+    - Confirmed zero application files written to `C:\`.

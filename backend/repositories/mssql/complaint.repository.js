@@ -113,19 +113,20 @@ class ComplaintRepository {
       .input('description', sql.NVarChar, data.description)
       .input('attachment_url', sql.VarChar, data.attachment_url || null)
       .input('invoice_url', sql.VarChar, data.invoice_url || null)
+      .input('ocr_text', sql.NVarChar, data.ocr_text || null)
       .input('submission_type', sql.VarChar, data.submission_type || (data.invoice_url ? 'ocr' : 'manual'))
       .input('assigned_team_id', sql.Int, assignedTeamId)
       .input('sla_hours', sql.Int, slaWindowHours)
       .query(`
         INSERT INTO Complaints (
           complaint_number, sales_executive_id, warehouse_id, customer_code, invoice_number, 
-          complaint_type_id, complaint_subtype_id, description, attachment_url, invoice_url, submission_type, status, 
+          complaint_type_id, complaint_subtype_id, description, attachment_url, invoice_url, ocr_text, submission_type, status, 
           assigned_warehouse_team_id, raised_at, warehouse_team_deadline
         )
         OUTPUT INSERTED.id, INSERTED.complaint_number
         VALUES (
           @complaint_number, @sales_executive_id, @warehouse_id, @customer_code, @invoice_number, 
-          @complaint_type_id, @complaint_subtype_id, @description, @attachment_url, @invoice_url, @submission_type, 'Assigned', 
+          @complaint_type_id, @complaint_subtype_id, @description, @attachment_url, @invoice_url, @ocr_text, @submission_type, 'Assigned', 
           @assigned_team_id, GETDATE(), DATEADD(hour, @sla_hours, GETDATE())
         )
       `);
@@ -202,23 +203,21 @@ class ComplaintRepository {
     if (userRole === 'Sales Executive') {
       whereClause += ` AND c.sales_executive_id = ${parseInt(userId, 10)} AND c.status <> 'Closed'`;
     } else if (userRole === 'Warehouse Team') {
-      // Visible for their warehouse, plus the shared global pool of invoice complaints
-      whereClause += ` AND (c.warehouse_id = ${parseInt(warehouseId || 0, 10)} OR c.warehouse_id IS NULL OR c.submission_type = 'ocr') AND c.status <> 'Closed'`;
+      // Visible for their warehouse, plus the shared global pool of invoice complaints (where warehouse_id IS NULL)
+      whereClause += ` AND (c.warehouse_id = ${parseInt(warehouseId || 0, 10)} OR c.warehouse_id IS NULL) AND c.status <> 'Closed'`;
     } else if (userRole === 'Warehouse Manager') {
       // Visible for their warehouse escalated complaints, escalated invoice complaints actioned by their team, plus shared global invoice complaints
       if (history) {
         whereClause += ` AND (
           (c.warehouse_id = ${parseInt(warehouseId || 0, 10)} AND c.escalated_to_manager_at IS NOT NULL)
           OR (c.warehouse_id IS NULL AND c.taken_action_by IN (SELECT id FROM Users WHERE warehouse_id = ${parseInt(warehouseId || 0, 10)}) AND c.escalated_to_manager_at IS NOT NULL)
-          OR c.warehouse_id IS NULL 
-          OR c.submission_type = 'ocr'
+          OR c.warehouse_id IS NULL
         ) AND c.status <> 'Closed'`;
       } else {
         whereClause += ` AND (
           (c.warehouse_id = ${parseInt(warehouseId || 0, 10)} AND c.escalated_to_manager_at IS NOT NULL AND c.status NOT IN ('Resolved', 'Completed', 'Closed'))
           OR (c.warehouse_id IS NULL AND c.taken_action_by IN (SELECT id FROM Users WHERE warehouse_id = ${parseInt(warehouseId || 0, 10)}) AND c.escalated_to_manager_at IS NOT NULL AND c.status NOT IN ('Resolved', 'Completed', 'Closed'))
-          OR c.warehouse_id IS NULL 
-          OR c.submission_type = 'ocr'
+          OR c.warehouse_id IS NULL
         ) AND c.status <> 'Closed'`;
       }
     }
@@ -261,6 +260,7 @@ class ComplaintRepository {
         c.warehouse_id,
         c.attachment_url,
         c.invoice_url,
+        c.ocr_text,
         c.submission_type,
         (CASE WHEN c.attachment_url IS NOT NULL THEN 1 ELSE 0 END) AS attach,
         DATEDIFF(hour, GETDATE(), c.warehouse_team_deadline) AS hours_left,
@@ -321,6 +321,7 @@ class ComplaintRepository {
         attach: Boolean(row.attach),
         attachment_url: row.attachment_url,
         invoice_url: row.invoice_url,
+        ocr_text: row.ocr_text || '',
         submission_type: row.submission_type || (row.invoice_url ? 'ocr' : 'manual'),
         taken_action_by: row.taken_action_by,
         actor_name: row.actor_name,
@@ -495,6 +496,7 @@ class ComplaintRepository {
           ISNULL(w.name, 'Global / Shared Queue') AS warehouse_name,
           c.attachment_url,
           c.invoice_url,
+          c.ocr_text,
           c.submission_type,
           DATEDIFF(hour, GETDATE(), c.warehouse_team_deadline) AS hours_left,
           c.taken_action_by,
@@ -546,6 +548,8 @@ class ComplaintRepository {
       department: row.warehouse_name,
       attachment_url: row.attachment_url,
       invoice_url: row.invoice_url,
+      ocr_text: row.ocr_text || '',
+      submission_type: row.submission_type || (row.invoice_url ? 'ocr' : 'manual'),
       taken_action_by: row.taken_action_by,
       sales_executive_id: row.sales_executive_id,
       warehouse_id: row.warehouse_id

@@ -150,3 +150,15 @@ BEGIN
     ALTER TABLE Complaints 
     ADD invoice_url VARCHAR(500) NULL;
 END;
+
+-- Migration to add ocr_text to Complaints table if it doesn't exist
+IF NOT EXISTS (
+    SELECT * FROM sys.columns 
+    WHERE object_id = OBJECT_ID(N'[dbo].[Complaints]') 
+      AND name = N'ocr_text'
+)
+BEGIN
+    ALTER TABLE Complaints 
+    ADD ocr_text NVARCHAR(MAX) NULL;
+END;
+

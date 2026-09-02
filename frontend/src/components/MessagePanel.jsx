@@ -147,7 +147,7 @@ const MessagePanel = ({
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const canViewInvoice = replyToComplaint?.invoice_url && ['Warehouse Team', 'Warehouse Manager', 'Administrator'].includes(user?.role);
+  const canViewInvoice = (replyToComplaint?.invoice_url || replyToComplaint?.ocr_text) && ['Sales Executive', 'Warehouse Team', 'Warehouse Manager', 'Administrator'].includes(user?.role);
 
   return (
     <AnimatePresence>
@@ -465,6 +465,7 @@ const MessagePanel = ({
           isOpen={invoiceModalOpen}
           onClose={() => setInvoiceModalOpen(false)}
           imageUrl={replyToComplaint.invoice_url}
+          ocrText={replyToComplaint.ocr_text || ''}
           title={`Invoice Document — ${replyToComplaint.id} (${replyToComplaint.customer || ''})`}
           fileName={replyToComplaint.invoice || ''}
         />

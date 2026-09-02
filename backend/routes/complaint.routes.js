@@ -394,7 +394,7 @@ router.post('/', authMiddleware, requirePermission('complaints', 'write'), (req,
     }
 
     try {
-      const { warehouse_id, customer_code, invoice_number, complaint_type_id, complaint_subtype_id, description, submission_type } = req.body;
+      const { warehouse_id, customer_code, invoice_number, complaint_type_id, complaint_subtype_id, description, submission_type, ocr_text } = req.body;
 
       const isOcr = submission_type === 'ocr' || req.body.entry_mode === 'ocr';
 
@@ -439,6 +439,7 @@ router.post('/', authMiddleware, requirePermission('complaints', 'write'), (req,
         description: finalDescription,
         attachment_url,
         invoice_url,
+        ocr_text: ocr_text || null,
         submission_type: isOcr ? 'ocr' : 'manual'
       });
 

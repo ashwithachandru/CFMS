@@ -191,6 +191,7 @@ const RaiseComplaint = () => {
       else if (invoiceUrl) formData.append('invoice_url', invoiceUrl);
 
       if (photoFile) formData.append('photo', photoFile);
+      if (rawOcrText) formData.append('ocr_text', rawOcrText);
 
       const res = await api.postFormData('/complaints', formData);
       const result = await res.json();

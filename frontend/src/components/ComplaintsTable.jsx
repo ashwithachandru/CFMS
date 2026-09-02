@@ -19,7 +19,8 @@ const ComplaintsTable = ({
   loading = false,
   activeTab = 'Dashboard'
 }) => {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
+  const canReadComplaints = hasPermission ? hasPermission('complaints', 'read') : true;
   const isSalesExec = user?.role === 'Sales Executive';
   const pageSize = 5;
   const totalPages = Math.ceil(complaints.length / pageSize) || 1;
@@ -29,6 +30,7 @@ const ComplaintsTable = ({
   const [activeInvoiceModal, setActiveInvoiceModal] = useState({
     isOpen: false,
     imageUrl: '',
+    ocrText: '',
     title: '',
     fileName: ''
   });
@@ -266,7 +268,7 @@ const ComplaintsTable = ({
                 </div>
                 <div style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 'bold' }}>
                   {comp.customer} • {comp.invoice}
-                  {comp.invoice_url && ['Warehouse Team', 'Warehouse Manager', 'Administrator'].includes(user?.role) && (
+                  {(comp.invoice_url || comp.ocr_text) && canReadComplaints && ['Sales Executive', 'Warehouse Team', 'Warehouse Manager', 'Administrator'].includes(user?.role) && (
                     <button
                       type="button"
                       onClick={(e) => {
@@ -274,6 +276,7 @@ const ComplaintsTable = ({
                         setActiveInvoiceModal({
                           isOpen: true,
                           imageUrl: comp.invoice_url,
+                          ocrText: comp.ocr_text || '',
                           title: `Invoice Document — ${comp.id} (${comp.customer})`,
                           fileName: comp.invoice || ''
                         });
@@ -387,7 +390,7 @@ const ComplaintsTable = ({
                     <td style={{ padding: '12px 10px', width: '110px', minWidth: '110px', boxSizing: 'border-box', textAlign: 'left', fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 'normal' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                         <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{comp.invoice}</span>
-                        {comp.invoice_url && ['Warehouse Team', 'Warehouse Manager', 'Administrator'].includes(user?.role) && (
+                        {(comp.invoice_url || comp.ocr_text) && canReadComplaints && ['Sales Executive', 'Warehouse Team', 'Warehouse Manager', 'Administrator'].includes(user?.role) && (
                           <button
                             type="button"
                             onClick={(e) => {
@@ -395,6 +398,7 @@ const ComplaintsTable = ({
                               setActiveInvoiceModal({
                                 isOpen: true,
                                 imageUrl: comp.invoice_url,
+                                ocrText: comp.ocr_text || '',
                                 title: `Invoice Document — ${comp.id} (${comp.customer})`,
                                 fileName: comp.invoice || ''
                               });
@@ -604,6 +608,7 @@ const ComplaintsTable = ({
         isOpen={activeInvoiceModal.isOpen}
         onClose={() => setActiveInvoiceModal(prev => ({ ...prev, isOpen: false }))}
         imageUrl={activeInvoiceModal.imageUrl}
+        ocrText={activeInvoiceModal.ocrText}
         title={activeInvoiceModal.title}
         fileName={activeInvoiceModal.fileName}
       />
