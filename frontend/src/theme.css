@@ -1,21 +1,23 @@
 :root {
-  /* Enterprise Theme Core Colors - Light Mode */
+  /* Enterprise Theme Core Colors - Light Mode (Forest Green + Black Theme) */
   --bg-primary: #FFFFFF;
-  --bg-secondary: #F5F7FA;
-  --bg-navbar: #0F2A4A;
-  --brand-primary: #1E4FD9;
+  --bg-secondary: #F4F6F4;
+  --bg-navbar: #0D1C14;
+  --brand-primary: #1B4332;
+  --brand-primary-hover: #143426;
+  --brand-primary-light: rgba(27, 67, 50, 0.08);
   --bg-floating: #FFFFFF;
   
   --text-navbar: #FFFFFF;
-  --text-navbar-secondary: #A5C2F4;
-  --text-primary: #0F2A4A;
-  --text-secondary: #475569;
-  --text-muted: #64748B;
+  --text-navbar-secondary: #A7D7C5;
+  --text-primary: #111827;
+  --text-secondary: #4B5563;
+  --text-muted: #6B7280;
   
-  --bg-active: #1E4FD9;
+  --bg-active: #1B4332;
   --text-active: #FFFFFF;
-  --card-selected-bg: #EFF4FF;
-  --card-selected-border: #1E4FD9;
+  --card-selected-bg: #EAF4EE;
+  --card-selected-border: #1B4332;
   
   --border-color: #E2E8F0;
   
@@ -25,8 +27,8 @@
   --shadow-card-hover: var(--shadow-md);
   
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
 
   /* Spacing Grid (8px based) */
   --space-xs: 4px;
@@ -43,49 +45,51 @@
   --radius-full: 9999px;
 
   /* UI Status & Pill Colors - Light Mode */
-  --mismatch-bg: #F0E7FB;
-  --mismatch-text: #7C3AED;
-  --packaging-bg: #E3F9E9;
-  --packaging-text: #1E9E52;
-  --quality-bg: #FDEAEA;
-  --quality-text: #D93030;
-  --transport-bg: #FEF0E0;
-  --transport-text: #E08A1F;
+  --mismatch-bg: #F3E8FF;
+  --mismatch-text: #6D28D9;
+  --packaging-bg: #E8F5E9;
+  --packaging-text: #1B4332;
+  --quality-bg: #FEE2E2;
+  --quality-text: #DC2626;
+  --transport-bg: #FEF3C7;
+  --transport-text: #B45309;
 
-  --pending-bg: #FFF4E0;
-  --pending-text: #E0941F;
-  --inprogress-bg: #E5F0FC;
-  --inprogress-text: #2E6DA4;
-  --escalated-bg: #FDEAEA;
-  --escalated-text: #D93030;
-  --completed-bg: #E3F9E9;
-  --completed-text: #1E9E52;
+  --pending-bg: #FEF3C7;
+  --pending-text: #B45309;
+  --inprogress-bg: #EAF4EE;
+  --inprogress-text: #1B4332;
+  --escalated-bg: #FEE2E2;
+  --escalated-text: #DC2626;
+  --completed-bg: #E8F5E9;
+  --completed-text: #166534;
 
-  --color-pending: #E0941F;
-  --color-inprogress: #2E6DA4;
-  --color-escalated: #D93030;
-  --color-completed: #1E9E52;
+  --color-pending: #D97706;
+  --color-inprogress: #1B4332;
+  --color-escalated: #DC2626;
+  --color-completed: #166534;
   --sla-banner-bg: var(--escalated-bg);
 }
 
 .dark {
-  /* Enterprise Theme Core Colors - Dark Mode */
-  --bg-primary: #1E1E1E; /* Card/Panel/Sidebar/Navbar Background */
-  --bg-secondary: #121212; /* Page Background */
-  --bg-navbar: #1E1E1E; /* Matches sidebar/cards in dark mode */
-  --brand-primary: #396BEB; /* Desaturated brand blue, compliant 4.66:1 contrast with white text */
-  --bg-floating: #2A2A2A; /* Modal/Dropdown/Tooltip Level 2 Elevation */
+  /* Enterprise Theme Core Colors - Dark Mode (Forest Green + Black Theme) */
+  --bg-primary: #121815; /* Card/Panel/Sidebar Background */
+  --bg-secondary: #0A0E0C; /* Page Background (Deep Obsidian Black) */
+  --bg-navbar: #0D1310; /* Navbar Background */
+  --brand-primary: #236B43; /* Forest green brand accent */
+  --brand-primary-hover: #2D7D50;
+  --brand-primary-light: rgba(82, 183, 136, 0.15);
+  --bg-floating: #18221D; /* Modal/Dropdown/Tooltip Level 2 Elevation */
   
-  --text-navbar: #E0E0E0;
-  --text-navbar-secondary: #A0A0A0;
-  --text-primary: #E0E0E0;
-  --text-secondary: #A0A0A0;
-  --text-muted: #A0A0A0;
+  --text-navbar: #F3F4F6;
+  --text-navbar-secondary: #8A9A90;
+  --text-primary: #F3F4F6;
+  --text-secondary: #9CA3AF;
+  --text-muted: #9CA3AF;
   
-  --bg-active: #396BEB;
+  --bg-active: #236B43;
   --text-active: #FFFFFF;
   
-  --border-color: #333333;
+  --border-color: #1F2E25;
   
   --bg-card: var(--bg-primary);
   --border-card: var(--border-color);
@@ -95,33 +99,33 @@
   --shadow-sm: none;
   --shadow-md: none;
   --shadow-lg: none;
-  --card-selected-bg: rgba(57, 107, 235, 0.15);
-  --card-selected-border: #396BEB;
+  --card-selected-bg: rgba(35, 107, 67, 0.2);
+  --card-selected-border: #52B788;
 
   /* UI Status & Pill Colors - Dark Mode Legible */
-  --mismatch-bg: rgba(124, 58, 237, 0.15);
-  --mismatch-text: #A78BFA;
-  --packaging-bg: rgba(30, 158, 82, 0.15);
-  --packaging-text: #4CBF7D;
-  --quality-bg: rgba(217, 48, 48, 0.15);
-  --quality-text: #E36767;
-  --transport-bg: rgba(224, 138, 31, 0.15);
-  --transport-text: #E0A94F;
+  --mismatch-bg: rgba(139, 92, 246, 0.15);
+  --mismatch-text: #C4B5FD;
+  --packaging-bg: rgba(45, 106, 79, 0.25);
+  --packaging-text: #6EE7B7;
+  --quality-bg: rgba(239, 68, 68, 0.18);
+  --quality-text: #FCA5A5;
+  --transport-bg: rgba(245, 158, 11, 0.18);
+  --transport-text: #FCD34D;
 
-  --pending-bg: rgba(224, 148, 31, 0.15);
-  --pending-text: #E0A94F;
-  --inprogress-bg: rgba(46, 109, 164, 0.18);
-  --inprogress-text: #5B9BD5;
-  --escalated-bg: rgba(217, 48, 48, 0.15);
-  --escalated-text: #E0E0E0; /* soft off-white text color for dark mode escalated */
-  --completed-bg: rgba(30, 158, 82, 0.15);
-  --completed-text: #4CBF7D;
+  --pending-bg: rgba(245, 158, 11, 0.18);
+  --pending-text: #FCD34D;
+  --inprogress-bg: rgba(45, 106, 79, 0.25);
+  --inprogress-text: #6EE7B7;
+  --escalated-bg: rgba(239, 68, 68, 0.18);
+  --escalated-text: #FCA5A5;
+  --completed-bg: rgba(34, 197, 94, 0.2);
+  --completed-text: #86EFAC;
 
-  --color-pending: #E0A94F;
-  --color-inprogress: #5B9BD5;
-  --color-escalated: #E36767; /* left border and link color for dark mode escalated */
-  --color-completed: #4CBF7D;
-  --sla-banner-bg: rgba(217, 48, 48, 0.12);
+  --color-pending: #F59E0B;
+  --color-inprogress: #52B788;
+  --color-escalated: #EF4444;
+  --color-completed: #22C55E;
+  --sla-banner-bg: rgba(239, 68, 68, 0.14);
 }
 
 /* Base custom styles using variables */
@@ -152,7 +156,7 @@
 }
 
 .input-container:focus {
-  border-color: var(--bg-active);
+  border-color: var(--brand-primary);
 }
 
 /* Micro-interactions, hover states, and transitions */

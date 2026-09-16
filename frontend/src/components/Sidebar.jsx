@@ -190,7 +190,7 @@ const Sidebar = ({ activeTab, setActiveTab, handleLogout, isDesktop, sidebarOpen
                 justifyContent: 'center', 
                 fontWeight: 'bold', 
                 fontSize: '13px',
-                backgroundColor: '#4F7CFF', 
+                backgroundColor: 'var(--brand-primary)', 
                 color: '#FFFFFF'
               }}
             >
@@ -225,12 +225,12 @@ const Sidebar = ({ activeTab, setActiveTab, handleLogout, isDesktop, sidebarOpen
               boxSizing: 'border-box'
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#F3F4F6';
+              e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
               e.currentTarget.style.color = '#EF4444';
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.backgroundColor = 'transparent';
-              e.currentTarget.style.color = '#6B7280';
+              e.currentTarget.style.color = 'var(--text-secondary)';
             }}
             type="button"
           >

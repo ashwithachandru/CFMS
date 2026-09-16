@@ -3,13 +3,14 @@ const { getPool, sql } = require('../../config/db');
 class UserRepository {
   async findByEmail(email) {
     const pool = getPool();
+    const cleanEmail = (email || '').trim().toLowerCase();
     const result = await pool.request()
-      .input('email', sql.VarChar, email)
+      .input('email', sql.VarChar, cleanEmail)
       .query(`
         SELECT u.*, u.role AS role_name, w.name AS warehouse_name 
         FROM Users u
         LEFT JOIN Warehouses w ON u.warehouse_id = w.id
-        WHERE u.email = @email OR u.username = @email
+        WHERE LOWER(u.email) = @email OR LOWER(u.username) = @email
       `);
     return result.recordset[0] || null;
   }
@@ -61,14 +62,15 @@ class UserRepository {
 
   async setResetToken(email, token, expiry) {
     const pool = getPool();
+    const cleanEmail = (email || '').trim().toLowerCase();
     const result = await pool.request()
-      .input('email', sql.VarChar, email)
+      .input('email', sql.VarChar, cleanEmail)
       .input('token', sql.VarChar, token)
       .input('expiry', sql.DateTime, expiry)
       .query(`
         UPDATE Users 
         SET reset_token = @token, reset_token_expiry = @expiry, updated_at = GETDATE()
-        WHERE email = @email OR username = @email
+        WHERE LOWER(email) = @email OR LOWER(username) = @email
       `);
     return result.rowsAffected[0] > 0;
   }
@@ -80,7 +82,7 @@ class UserRepository {
       .query(`
         SELECT u.*, u.role AS role_name 
         FROM Users u
-        WHERE u.reset_token = @token AND u.reset_token_expiry > GETUTCDATE()
+        WHERE u.reset_token = @token AND (u.reset_token_expiry > GETDATE() OR u.reset_token_expiry > GETUTCDATE())
       `);
     return result.recordset[0] || null;
   }
@@ -88,14 +90,15 @@ class UserRepository {
   // OTP-specific: store 6-digit OTP with 10-minute expiry
   async setOtp(email, otp, expiry) {
     const pool = getPool();
+    const cleanEmail = (email || '').trim().toLowerCase();
     const result = await pool.request()
-      .input('email', sql.VarChar, email)
+      .input('email', sql.VarChar, cleanEmail)
       .input('otp', sql.VarChar, otp)
       .input('expiry', sql.DateTime, expiry)
       .query(`
         UPDATE Users
         SET reset_token = @otp, reset_token_expiry = @expiry, updated_at = GETDATE()
-        WHERE email = @email OR username = @email
+        WHERE LOWER(email) = @email OR LOWER(username) = @email
       `);
     return result.rowsAffected[0] > 0;
   }
@@ -108,7 +111,7 @@ class UserRepository {
       .query(`
         SELECT u.*, u.role AS role_name
         FROM Users u
-        WHERE u.reset_token = @token AND u.reset_token_expiry > GETUTCDATE()
+        WHERE u.reset_token = @token AND (u.reset_token_expiry > GETDATE() OR u.reset_token_expiry > GETUTCDATE())
       `);
     return result.recordset[0] || null;
   }

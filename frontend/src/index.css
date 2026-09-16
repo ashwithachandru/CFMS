@@ -5,53 +5,53 @@
   line-height: 1.5;
   font-weight: 400;
 
-  /* Enterprise Light Mode Tokens */
-  --bg-body: #F8FAFC;
+  /* Enterprise Light Mode Tokens - Forest Green + Black */
+  --bg-body: #F4F6F4;
   --bg-card: #FFFFFF;
   --border-card: #E2E8F0;
-  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.05);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.04);
   --shadow-card-hover: 0 6px 18px rgba(0, 0, 0, 0.08);
   
-  --text-primary: #0F172A;
-  --text-secondary: #475569;
-  --text-muted: #64748B;
+  --text-primary: #111827;
+  --text-secondary: #4B5563;
+  --text-muted: #6B7280;
   
-  --color-primary: #2563EB;
-  --color-primary-hover: #1D4ED8;
+  --color-primary: #1B4332;
+  --color-primary-hover: #143426;
   --color-input-bg: #FFFFFF;
   --color-input-border: #CBD5E1;
-  --color-input-focus: #2563EB;
+  --color-input-focus: #1B4332;
   
-  --color-success: #22C55E;
-  --color-warning: #F59E0B;
-  --color-error: #EF4444;
-  --color-info: #0EA5E9;
+  --color-success: #166534;
+  --color-warning: #D97706;
+  --color-error: #DC2626;
+  --color-info: #0D9488;
   
   --border-radius: 10px;
 }
 
 .dark {
-  /* Enterprise Dark Mode Tokens */
-  --bg-body: #121212;
-  --bg-card: #1E1E1E;
-  --border-card: #333333;
+  /* Enterprise Dark Mode Tokens - Forest Green + Black */
+  --bg-body: #0A0E0C;
+  --bg-card: #121815;
+  --border-card: #1F2E25;
   --shadow-card: none;
   --shadow-card-hover: none;
   
-  --text-primary: #E0E0E0;
-  --text-secondary: #A0A0A0;
-  --text-muted: #A0A0A0;
+  --text-primary: #F3F4F6;
+  --text-secondary: #9CA3AF;
+  --text-muted: #9CA3AF;
   
-  --color-primary: #3B6BE8; /* Muted accent blue (compliant 4.7:1 contrast with white text) */
-  --color-primary-hover: #5882EB;
-  --color-input-bg: #121212; /* Indented look inside the card */
-  --color-input-border: #333333;
-  --color-input-focus: #3B6BE8;
+  --color-primary: #236B43;
+  --color-primary-hover: #2D7D50;
+  --color-input-bg: #0A0E0C;
+  --color-input-border: #1F2E25;
+  --color-input-focus: #52B788;
   
   --color-success: #22C55E;
   --color-warning: #F59E0B;
   --color-error: #EF4444;
-  --color-info: #0EA5E9;
+  --color-info: #2DD4BF;
 }
 
 body, button, input, select, textarea {
@@ -72,9 +72,9 @@ body {
 .bg-auth-mesh {
   background-color: var(--bg-body);
   background-image: 
-    radial-gradient(at 0% 0%, rgba(30, 79, 217, 0.06) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(30, 79, 217, 0.05) 0px, transparent 50%),
-    radial-gradient(at 50% 50%, rgba(59, 107, 232, 0.04) 0px, transparent 60%);
+    radial-gradient(at 0% 0%, rgba(27, 67, 50, 0.08) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(27, 67, 50, 0.06) 0px, transparent 50%),
+    radial-gradient(at 50% 50%, rgba(45, 106, 79, 0.05) 0px, transparent 60%);
   transition: background-color 0.2s ease;
 }
 
@@ -173,12 +173,12 @@ body {
   border: 1px solid var(--border-card);
   border-radius: 16px;
   padding: 40px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.06);
   transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .dark .glass-card-auth {
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
 }
 
 /* Enterprise Input Group & Focus Glow */
@@ -206,11 +206,12 @@ body {
 
 .glass-input:focus {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(76, 124, 240, 0.14);
+  box-shadow: 0 0 0 3px rgba(27, 67, 50, 0.14);
 }
 
 .dark .glass-input:focus {
-  box-shadow: 0 0 0 3px rgba(59, 107, 232, 0.2);
+  border-color: #52B788;
+  box-shadow: 0 0 0 3px rgba(82, 183, 136, 0.2);
 }
 
 .glass-input.invalid {
@@ -246,12 +247,12 @@ body {
   cursor: pointer;
   width: 100%;
   transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
-  box-shadow: 0 4px 12px rgba(30, 79, 217, 0.2);
+  box-shadow: 0 4px 12px rgba(27, 67, 50, 0.25);
 }
 
 .glass-button:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(30, 79, 217, 0.32);
+  box-shadow: 0 6px 18px rgba(27, 67, 50, 0.35);
 }
 
 .glass-button:active {
@@ -288,7 +289,7 @@ body {
 }
 
 /* ==========================================================================
-   Split-Screen Auth Layout (Login / Register)
+   Split-Screen Auth Layout (Login / Register) - Forest Green + Black Theme
    ========================================================================== */
 .auth-split-container {
   display: flex;
@@ -307,11 +308,15 @@ body {
   width: 100%;
   flex-direction: column;
   justify-content: space-between;
-  padding: 56px 48px;
+  padding: 48px 44px;
   position: relative;
   overflow: hidden;
   color: #F4F5F7 !important;
-  background: #0A0D12 !important;
+  background-color: #080D0A !important;
+  background-image: 
+    radial-gradient(ellipse at 15% 15%, rgba(45, 106, 79, 0.2) 0%, transparent 65%),
+    radial-gradient(circle at 85% 85%, rgba(27, 67, 50, 0.15) 0%, transparent 55%) !important;
+  border-right: 1px solid #19241D;
   box-sizing: border-box;
 }
 
@@ -353,14 +358,16 @@ body {
   border: 1px solid var(--border-card);
   border-radius: 16px;
   padding: 32px 36px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
   margin: auto 0;
   box-sizing: border-box;
   transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .dark .auth-form-card {
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  background-color: #121815;
+  border-color: #1F2E25;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
 
 .auth-mobile-logo {
@@ -368,7 +375,11 @@ body {
 }
 
 .auth-tab-indicator {
-  background-color: var(--color-primary) !important;
+  background-color: #1B4332 !important;
+}
+
+.dark .auth-tab-indicator {
+  background-color: #2D6A4F !important;
 }
 
 @media (min-width: 768px) {
@@ -378,8 +389,8 @@ body {
   .auth-hero-panel {
     display: flex;
     width: 48%;
-    max-width: 520px;
-    padding: 56px 48px;
+    max-width: 540px;
+    padding: 52px 48px;
     min-height: 100vh;
   }
   .auth-form-panel {
@@ -412,15 +423,24 @@ body {
   transition: background-color 0.2s, border-color 0.2s;
 }
 
+.dark .tab-container {
+  background: #0B0F0D;
+  border-color: #1F2E25;
+}
+
 .tab-indicator {
   position: absolute;
   top: 4px;
   bottom: 4px;
   width: calc(50% - 4px);
-  background-color: var(--color-primary);
+  background-color: #1B4332;
   border-radius: 6px;
   transition: transform 250ms cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.dark .tab-indicator {
+  background-color: #2D6A4F;
 }
 
 .tab-btn {
@@ -439,7 +459,72 @@ body {
 }
 
 .tab-btn.active {
-  color: #FFFFFF;
+  color: #FFFFFF !important;
+}
+
+/* Forest Green + Black Auth Interactive Controls */
+.auth-link-forest {
+  color: #1B4332;
+  transition: color 150ms ease, text-decoration 150ms ease;
+}
+
+.auth-link-forest:hover {
+  color: #143426;
+  text-decoration: underline;
+}
+
+.dark .auth-link-forest {
+  color: #52B788;
+}
+
+.dark .auth-link-forest:hover {
+  color: #74C69D;
+  text-decoration: underline;
+}
+
+.auth-submit-btn {
+  background: #1B4332 !important;
+  color: #FFFFFF !important;
+  border: 1px solid #1B4332 !important;
+  box-shadow: 0 4px 12px rgba(27, 67, 50, 0.25) !important;
+}
+
+.auth-submit-btn:hover {
+  background: #143426 !important;
+  border-color: #143426 !important;
+  box-shadow: 0 6px 16px rgba(27, 67, 50, 0.35) !important;
+}
+
+.dark .auth-submit-btn {
+  background: #236B43 !important;
+  border-color: #2D7D50 !important;
+  box-shadow: 0 4px 14px rgba(35, 107, 67, 0.3) !important;
+}
+
+.dark .auth-submit-btn:hover {
+  background: #2D7D50 !important;
+  border-color: #35925E !important;
+  box-shadow: 0 6px 18px rgba(45, 125, 80, 0.45) !important;
+}
+
+.auth-form-card .glass-input {
+  border-radius: 10px;
+}
+
+.auth-form-card .glass-input:focus {
+  border-color: #1B4332;
+  box-shadow: 0 0 0 3px rgba(27, 67, 50, 0.12);
+}
+
+.dark .auth-form-card .glass-input {
+  background-color: #0A0E0C;
+  border-color: #1F2E25;
+  color: #F3F4F6;
+}
+
+.dark .auth-form-card .glass-input:focus {
+  border-color: #52B788;
+  box-shadow: 0 0 0 3px rgba(82, 183, 136, 0.2);
 }
 
 /* Scrollbar styling */

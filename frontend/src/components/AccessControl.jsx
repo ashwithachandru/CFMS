@@ -8,7 +8,7 @@ import { useAuth } from '../context/AuthContext';
 const ROLE_COLORS = {
   'Administrator': { bg: 'rgba(139, 92, 246, 0.12)', text: '#8B5CF6', border: 'rgba(139, 92, 246, 0.3)' },
   'Warehouse Manager': { bg: 'rgba(245, 158, 11, 0.12)', text: '#F59E0B', border: 'rgba(245, 158, 11, 0.3)' },
-  'Warehouse Team': { bg: 'rgba(59, 130, 246, 0.12)', text: '#3B82F6', border: 'rgba(59, 130, 246, 0.3)' },
+  'Warehouse Team': { bg: 'var(--brand-primary-light, rgba(27, 67, 50, 0.12))', text: 'var(--brand-primary)', border: 'rgba(27, 67, 50, 0.3)' },
   'Sales Executive': { bg: 'rgba(16, 185, 129, 0.12)', text: '#10B981', border: 'rgba(16, 185, 129, 0.3)' }
 };
 
@@ -345,7 +345,7 @@ const AccessControl = () => {
                               onClick={() => handleToggleRolePermission(r, m.key, 'read')}
                               style={{
                                 width: '36px', height: '20px', borderRadius: '10px', border: 'none', cursor: 'pointer',
-                                backgroundColor: perm.canRead ? '#3B82F6' : 'var(--border-color)',
+                                backgroundColor: perm.canRead ? 'var(--brand-primary)' : 'var(--border-color)',
                                 position: 'relative', transition: 'background-color 200ms ease', padding: 0
                               }}
                               title={`${r} Read ${m.name}: ${perm.canRead ? 'Granted' : 'Revoked'}`}
@@ -513,7 +513,7 @@ const AccessControl = () => {
                         {/* View Pill */}
                         <div style={{
                           display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 10px', borderRadius: '12px',
-                          backgroundColor: 'rgba(59, 130, 246, 0.1)', color: '#3B82F6', fontWeight: '700', fontSize: '12px', border: '1px solid rgba(59, 130, 246, 0.25)'
+                          backgroundColor: 'var(--brand-primary-light, rgba(27, 67, 50, 0.1))', color: 'var(--brand-primary)', fontWeight: '700', fontSize: '12px', border: '1px solid rgba(27, 67, 50, 0.25)'
                         }}>
                           <Eye size={13} />
                           View {u.viewCount}/{u.totalModules}
@@ -648,8 +648,8 @@ const AccessControl = () => {
                                       <div style={{ display: 'flex', justifyContent: 'center', gap: '6px' }}>
                                         <span style={{
                                           padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: '700',
-                                          backgroundColor: effRead ? 'rgba(59, 130, 246, 0.12)' : 'var(--bg-secondary)',
-                                          color: effRead ? '#3B82F6' : 'var(--text-muted)'
+                                          backgroundColor: effRead ? 'var(--brand-primary-light, rgba(27, 67, 50, 0.12))' : 'var(--bg-secondary)',
+                                          color: effRead ? 'var(--brand-primary)' : 'var(--text-muted)'
                                         }}>
                                           {effRead ? 'View' : 'No View'}
                                         </span>

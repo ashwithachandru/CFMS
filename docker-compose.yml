@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cfms-backend
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - CLIENT_URL=http://localhost:3000
+      - DB_SERVER=host.docker.internal
+      - DB_INSTANCE=SQLEXPRESS
+      - DB_DATABASE=${DB_DATABASE:-CustomerFeedbackDB}
+      - DB_USER=${DB_USER:-sa}
+      - DB_PASSWORD=${DB_PASSWORD:-AshwithaChandru*1}
+      - DB_PORT=${DB_PORT:-57011}
+      - DB_TRUST_SERVER_CERTIFICATE=true
+      - ALLOW_MOCK_DB=false
+      - JWT_SECRET=${JWT_SECRET:-cfms_access_token_secret_2026_super_secure_key_123!}
+      - REFRESH_SECRET=${REFRESH_SECRET:-cfms_refresh_token_secret_2026_super_secure_key_456!}
+      - EMAIL_PROVIDER=${EMAIL_PROVIDER:-smtp}
+      - EMAIL_SERVICE=${EMAIL_SERVICE:-gmail}
+      - EMAIL_HOST=${EMAIL_HOST:-smtp.gmail.com}
+      - EMAIL_PORT=${EMAIL_PORT:-587}
+      - EMAIL_USER=${EMAIL_USER:-ashwithac22@gmail.com}
+      - EMAIL_PASS=${EMAIL_PASS:-rxjnhsdgcvoqmiiv}
+      - EMAIL_FROM=${EMAIL_FROM:-Customer Feedback Management System (CFMS) <ashwithac22@gmail.com>}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - backend-uploads:/app/uploads
+    networks:
+      - cfms-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=/api
+    container_name: cfms-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - cfms-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  backend-uploads:
+    name: cfms_backend_uploads
+
+networks:
+  cfms-network:
+    name: cfms_network
+    driver: bridge

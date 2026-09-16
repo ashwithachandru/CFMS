@@ -114,7 +114,7 @@ const Navbar = ({ profileDropdownOpen, setProfileDropdownOpen, handleLogout, onT
             fontWeight: 'bold', 
             fontSize: '16px',
             backgroundColor: '#FFFFFF', 
-            color: '#1E4FD9'
+            color: '#1B4332'
           }}
         >
           RC
@@ -123,7 +123,7 @@ const Navbar = ({ profileDropdownOpen, setProfileDropdownOpen, handleLogout, onT
         {/* Two-line text stack */}
         <div style={{ display: 'flex', flexDirection: 'column', marginLeft: '4px', lineHeight: 1.1, textAlign: 'left' }}>
           <span style={{ fontWeight: 'bold', fontSize: '16px', color: '#FFFFFF' }}>Ramraj Cotton CFMS</span>
-          <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#C7D6FF', marginTop: '2px' }}>
+          <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#A7D7C5', marginTop: '2px' }}>
             Complaint Lifecycle Automation & Escalation
           </span>
         </div>
@@ -194,7 +194,7 @@ const Navbar = ({ profileDropdownOpen, setProfileDropdownOpen, handleLogout, onT
                   alignItems: 'center',
                   justifyContent: 'center',
                   padding: '0 4px',
-                  border: '2px solid #1E4FD9'
+                  border: '2px solid var(--brand-primary)'
                 }}
               >
                 {unreadCount}
@@ -296,7 +296,7 @@ const Navbar = ({ profileDropdownOpen, setProfileDropdownOpen, handleLogout, onT
                 height: '34px', 
                 borderRadius: '50%', 
                 backgroundColor: '#FFFFFF',
-                color: '#1E4FD9',
+                color: '#1B4332',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',

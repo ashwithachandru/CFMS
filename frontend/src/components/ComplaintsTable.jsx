@@ -32,7 +32,8 @@ const ComplaintsTable = ({
     imageUrl: '',
     ocrText: '',
     title: '',
-    fileName: ''
+    fileName: '',
+    complaintData: null
   });
 
   const renderActions = (comp) => {
@@ -152,7 +153,7 @@ const ComplaintsTable = ({
     if (status === 'Resolved' || status === 'Completed') return '#10B981';
     if (status === 'In Progress') return '#F59E0B';
     if (status && status.includes('Escalated')) return '#EF4444';
-    return '#1E4FD9'; // New / Assigned default blue
+    return 'var(--brand-primary)'; // New / Assigned default
   };
 
   const getBadgeColorForStatus = (status) => {
@@ -266,8 +267,11 @@ const ComplaintsTable = ({
                   <span style={{ fontWeight: 'bold', color: 'var(--brand-primary)', fontSize: '14px' }}>{comp.id}</span>
                   {renderStatusBadge(comp)}
                 </div>
-                <div style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 'bold' }}>
-                  {comp.customer} • {comp.invoice}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <span style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 'bold' }}>{comp.customer}</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '600' }}>{comp.invoice || '—'}</span>
+                  </div>
                   {(comp.invoice_url || comp.ocr_text) && canReadComplaints && ['Sales Executive', 'Warehouse Team', 'Warehouse Manager', 'Administrator'].includes(user?.role) && (
                     <button
                       type="button"
@@ -278,22 +282,23 @@ const ComplaintsTable = ({
                           imageUrl: comp.invoice_url,
                           ocrText: comp.ocr_text || '',
                           title: `Invoice Document — ${comp.id} (${comp.customer})`,
-                          fileName: comp.invoice || ''
+                          fileName: comp.invoice || '',
+                          complaintData: comp
                         });
                       }}
                       style={{
-                        marginLeft: '8px',
                         background: 'none',
                         border: 'none',
-                        padding: 0,
+                        padding: '2px 0',
                         fontSize: '11px',
-                        fontWeight: 'bold',
+                        fontWeight: '600',
                         color: 'var(--brand-primary)',
                         textDecoration: 'underline',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap'
                       }}
                     >
-                      (View Invoice)
+                      Click to View Invoice
                     </button>
                   )}
                 </div>
@@ -311,6 +316,17 @@ const ComplaintsTable = ({
             );
           })
         )}
+
+        {/* Invoice Popup Modal for Mobile View */}
+        <InvoiceModal
+          isOpen={activeInvoiceModal.isOpen}
+          onClose={() => setActiveInvoiceModal(prev => ({ ...prev, isOpen: false }))}
+          imageUrl={activeInvoiceModal.imageUrl}
+          ocrText={activeInvoiceModal.ocrText}
+          title={activeInvoiceModal.title}
+          fileName={activeInvoiceModal.fileName}
+          complaintData={activeInvoiceModal.complaintData}
+        />
       </div>
     );
   }
@@ -323,8 +339,8 @@ const ComplaintsTable = ({
             <tr style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               <th style={{ padding: '14px 10px', width: '95px', minWidth: '95px', boxSizing: 'border-box', textAlign: 'left' }}>Complaint ID</th>
               <th style={{ padding: '14px 10px', width: '110px', minWidth: '110px', boxSizing: 'border-box', textAlign: 'left' }}>Customer</th>
-              <th style={{ padding: '14px 10px', width: '110px', minWidth: '110px', boxSizing: 'border-box', textAlign: 'left' }}>Invoice #</th>
-              <th style={{ padding: '14px 10px', width: '180px', minWidth: '180px', boxSizing: 'border-box', textAlign: 'left' }}>Category</th>
+              <th style={{ padding: '14px 10px', width: '125px', minWidth: '125px', boxSizing: 'border-box', textAlign: 'center' }}>Invoice</th>
+              <th style={{ padding: '14px 10px', width: '175px', minWidth: '175px', boxSizing: 'border-box', textAlign: 'left' }}>Category</th>
               <th style={{ padding: '14px 10px', width: '110px', minWidth: '110px', boxSizing: 'border-box', textAlign: 'left' }}>Raised By</th>
               <th style={{ padding: '14px 10px', width: '110px', minWidth: '110px', boxSizing: 'border-box', textAlign: 'left' }}>Warehouse</th>
               <th style={{ padding: '14px 10px', width: '80px', minWidth: '80px', boxSizing: 'border-box', textAlign: 'left' }}>SLA Timer</th>
@@ -387,9 +403,11 @@ const ComplaintsTable = ({
                       {comp.customer}
                     </td>
 
-                    <td style={{ padding: '12px 10px', width: '110px', minWidth: '110px', boxSizing: 'border-box', textAlign: 'left', fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 'normal' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{comp.invoice}</span>
+                    <td style={{ padding: '10px 8px', width: '125px', minWidth: '125px', boxSizing: 'border-box', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
+                        <span style={{ fontWeight: '600', fontSize: '12.5px', color: 'var(--text-primary)', letterSpacing: '0.01em', whiteSpace: 'nowrap' }}>
+                          {comp.invoice || '—'}
+                        </span>
                         {(comp.invoice_url || comp.ocr_text) && canReadComplaints && ['Sales Executive', 'Warehouse Team', 'Warehouse Manager', 'Administrator'].includes(user?.role) && (
                           <button
                             type="button"
@@ -400,21 +418,32 @@ const ComplaintsTable = ({
                                 imageUrl: comp.invoice_url,
                                 ocrText: comp.ocr_text || '',
                                 title: `Invoice Document — ${comp.id} (${comp.customer})`,
-                                fileName: comp.invoice || ''
+                                fileName: comp.invoice || '',
+                                complaintData: comp
                               });
                             }}
                             style={{
                               background: 'none',
                               border: 'none',
-                              padding: 0,
+                              padding: '1px 4px',
                               fontSize: '11px',
-                              fontWeight: 'bold',
+                              fontWeight: '600',
                               color: 'var(--brand-primary)',
                               textDecoration: 'underline',
                               display: 'inline-flex',
                               alignItems: 'center',
+                              justifyContent: 'center',
                               gap: '3px',
-                              cursor: 'pointer'
+                              cursor: 'pointer',
+                              borderRadius: '4px',
+                              transition: 'all 0.15s ease',
+                              lineHeight: '1.2'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.color = 'var(--brand-primary-hover, #143426)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.color = 'var(--brand-primary)';
                             }}
                             title="Click to view stored invoice document in popup modal"
                           >
@@ -434,8 +463,8 @@ const ComplaintsTable = ({
                             fontSize: '10px', 
                             padding: '2px 6px', 
                             borderRadius: '4px', 
-                            backgroundColor: (comp.submission_type === 'ocr' || comp.invoice_url) ? 'rgba(37, 99, 235, 0.1)' : 'rgba(100, 116, 139, 0.1)', 
-                            color: (comp.submission_type === 'ocr' || comp.invoice_url) ? '#2563eb' : '#64748b', 
+                            backgroundColor: (comp.submission_type === 'ocr' || comp.invoice_url) ? 'rgba(27, 67, 50, 0.12)' : 'rgba(100, 116, 139, 0.1)', 
+                            color: (comp.submission_type === 'ocr' || comp.invoice_url) ? 'var(--brand-primary)' : 'var(--text-muted)', 
                             fontWeight: '600',
                             whiteSpace: 'nowrap',
                             flexShrink: 0
@@ -611,6 +640,7 @@ const ComplaintsTable = ({
         ocrText={activeInvoiceModal.ocrText}
         title={activeInvoiceModal.title}
         fileName={activeInvoiceModal.fileName}
+        complaintData={activeInvoiceModal.complaintData}
       />
     </div>
   );

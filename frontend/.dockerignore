@@ -1,0 +1,14 @@
+node_modules
+npm-debug.log
+.env
+.env.local
+.git
+.gitignore
+.vscode
+dist
+dist-ssr
+build
+scratch
+*.log
+capture_*.js
+debug_*.js

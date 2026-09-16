@@ -2,8 +2,8 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const RepositoryFactory = require('../repositories/repository.factory');
-const { sendResetMail, sendOtpMail } = require('../config/mailer');
-const { AuthError, ValidationError, NotFoundError } = require('../utils/errors');
+const mailer = require('../config/mailer');
+const { AuthError, ValidationError, NotFoundError, AppError } = require('../utils/errors');
 
 const userRepo = RepositoryFactory.getUserRepository();
 const roleRepo = RepositoryFactory.getRoleRepository();
@@ -181,11 +181,12 @@ class AuthService {
   }
 
   async forgotPassword(email, ipAddress, userAgent) {
-    const user = await userRepo.findByEmail(email);
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const user = await userRepo.findByEmail(cleanEmail);
 
     // Security: Do not reveal whether the email exists
     if (!user) {
-      console.log(`Forgot password OTP requested for non-existent email: ${email}`);
+      console.log(`Forgot password OTP requested for non-existent email: ${cleanEmail}`);
       return { message: 'If that email is registered, an OTP has been sent.' };
     }
 
@@ -193,14 +194,16 @@ class AuthService {
     const otp = String(Math.floor(100000 + Math.random() * 900000));
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-    await userRepo.setOtp(email, otp, otpExpiry);
-
+    // Attempt real email delivery
     try {
-      await sendOtpMail(email, otp);
+      await mailer.sendOtpMail(user.email, otp);
     } catch (err) {
-      console.error(`[SMTP MAIL ERROR] Failed to deliver OTP email to ${email}:`, err.message);
-      throw new ValidationError("We couldn't send the verification email right now. Please try again in a moment or contact support.");
+      console.error(`[SMTP ERROR] Could not deliver OTP email to ${cleanEmail}:`, err.message);
+      throw new AppError("Unable to send verification email. Please try again later.", 503);
     }
+
+    // Persist OTP in DB only upon successful delivery
+    await userRepo.setOtp(user.email, otp, otpExpiry);
 
     await auditRepo.create({
       userId: user.id,
@@ -214,13 +217,16 @@ class AuthService {
   }
 
   async verifyOtp(email, otp, ipAddress, userAgent) {
-    const user = await userRepo.findByEmail(email);
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanOtp = (otp || '').trim();
+
+    const user = await userRepo.findByEmail(cleanEmail);
     if (!user) {
       throw new ValidationError('Invalid email or OTP.');
     }
 
     // Check OTP matches and hasn't expired
-    if (!user.reset_token || user.reset_token !== otp) {
+    if (!user.reset_token || user.reset_token !== cleanOtp) {
       throw new ValidationError('Incorrect OTP. Please try again.');
     }
 
@@ -232,7 +238,7 @@ class AuthService {
     // reset-password step can be authenticated without re-verifying OTP.
     const sessionToken = crypto.randomBytes(32).toString('hex');
     const sessionExpiry = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
-    await userRepo.setOtp(email, sessionToken, sessionExpiry);
+    await userRepo.setOtp(user.email, sessionToken, sessionExpiry);
 
     await auditRepo.create({
       userId: user.id,

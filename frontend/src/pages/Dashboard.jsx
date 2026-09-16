@@ -268,11 +268,29 @@ const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('Dashboard');
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
 
-  // Handle navigation redirect state (e.g., from Raise Complaint sidebar clicks)
+  // Handle navigation redirect state (e.g., from Raise Complaint or duplicate detection)
   useEffect(() => {
     if (location.state?.activeTab) {
       setActiveTab(location.state.activeTab);
-      // Clear navigation state to avoid re-triggering on fresh reload
+    }
+    if (location.state?.highlightComplaintNumber || location.state?.selectedComplaintId) {
+      const compId = location.state.highlightComplaintNumber || location.state.selectedComplaintId;
+      (async () => {
+        try {
+          const res = await api.get(`/complaints/${compId}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.data?.complaint) {
+              setSelectedQuickComplaint(data.data.complaint);
+              setActiveTab('Dashboard');
+            }
+          }
+        } catch (e) {
+          console.error('Failed to load highlighted complaint:', e);
+        }
+      })();
+    }
+    if (location.state && (location.state.activeTab || location.state.highlightComplaintNumber || location.state.selectedComplaintId)) {
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location, navigate]);

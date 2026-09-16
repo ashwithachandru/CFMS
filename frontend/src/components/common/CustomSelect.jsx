@@ -123,7 +123,7 @@ const CustomSelect = ({
           outline: 'none',
           boxSizing: 'border-box',
           transition: 'all 150ms ease',
-          boxShadow: isOpen ? '0 0 0 3px rgba(30, 79, 217, 0.15)' : '0 1px 2px rgba(0, 0, 0, 0.04)'
+          boxShadow: isOpen ? '0 0 0 3px rgba(45, 106, 79, 0.18)' : '0 1px 2px rgba(0, 0, 0, 0.04)'
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', whiteSpace: 'nowrap' }}>
@@ -188,7 +188,7 @@ const CustomSelect = ({
                 if (isSelected) {
                   itemBg = 'var(--brand-primary)';
                 } else if (isFocused) {
-                  itemBg = 'rgba(76, 124, 240, 0.12)';
+                  itemBg = 'rgba(45, 106, 79, 0.14)';
                 }
 
                 return (

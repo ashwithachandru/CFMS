@@ -44,10 +44,10 @@ const Badge = ({
       dotColor: 'var(--color-completed)'
     },
     purple: {
-      bg: 'rgba(147, 51, 234, 0.1)',
-      color: 'var(--color-primary)',
+      bg: 'var(--mismatch-bg)',
+      color: 'var(--mismatch-text)',
       border: 'none',
-      dotColor: 'var(--color-primary)'
+      dotColor: 'var(--mismatch-text)'
     }
   };
 

@@ -468,6 +468,7 @@ const MessagePanel = ({
           ocrText={replyToComplaint.ocr_text || ''}
           title={`Invoice Document — ${replyToComplaint.id} (${replyToComplaint.customer || ''})`}
           fileName={replyToComplaint.invoice || ''}
+          complaintData={replyToComplaint}
         />
       )}
       </div>

@@ -22,8 +22,8 @@ const formatAuditTimestamp = (dateInput) => {
 };
 
 const ACTION_COLORS = {
-  'CREATE_USER': { bg: 'rgba(59, 130, 246, 0.12)', text: '#3B82F6', border: 'rgba(59, 130, 246, 0.3)' },
-  'UPDATE_USER': { bg: 'rgba(59, 130, 246, 0.12)', text: '#3B82F6', border: 'rgba(59, 130, 246, 0.3)' },
+  'CREATE_USER': { bg: 'var(--brand-primary-light, rgba(27, 67, 50, 0.12))', text: 'var(--brand-primary)', border: 'rgba(27, 67, 50, 0.3)' },
+  'UPDATE_USER': { bg: 'var(--brand-primary-light, rgba(27, 67, 50, 0.12))', text: 'var(--brand-primary)', border: 'rgba(27, 67, 50, 0.3)' },
   'UPDATE_ROLE_PERMISSION': { bg: 'rgba(139, 92, 246, 0.12)', text: '#8B5CF6', border: 'rgba(139, 92, 246, 0.3)' },
   'UPDATE_USER_OVERRIDE': { bg: 'rgba(236, 72, 153, 0.12)', text: '#EC4899', border: 'rgba(236, 72, 153, 0.3)' },
   'RESET_USER_OVERRIDES': { bg: 'rgba(245, 158, 11, 0.12)', text: '#F59E0B', border: 'rgba(245, 158, 11, 0.3)' },

@@ -14,7 +14,19 @@ import { jsPDF } from 'jspdf';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 
-const PIE_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#6366F1'];
+export const getStatusColor = (statusName) => {
+  const normalized = (statusName || '').trim().toLowerCase();
+  if (normalized.includes('warehouse head') || normalized.includes('head')) return '#DC2626'; // Deep Crimson Red (Tier 2 Escalation)
+  if (normalized.includes('escalat') || normalized.includes('manager')) return '#F97316'; // Vivid Orange (Tier 1 Escalation)
+  if (normalized === 'in progress') return '#0EA5E9'; // Cyan / Sky Blue (Active Work)
+  if (normalized === 'assigned') return '#6366F1'; // Indigo / Blue (Assigned / Neutral)
+  if (normalized === 'pending') return '#F59E0B'; // Amber (Waiting)
+  if (normalized === 'resolved' || normalized === 'completed') return '#10B981'; // Emerald Green (Resolved)
+  if (normalized === 'closed') return '#64748B'; // Slate Gray (Archived)
+  return '#1B4332'; // Default Fallback
+};
+
+const PIE_COLORS = ['#6366F1', '#0EA5E9', '#F97316', '#DC2626', '#10B981', '#F59E0B', '#64748B'];
 
 const Reports = () => {
   const { user } = useAuth();
@@ -85,8 +97,10 @@ const Reports = () => {
   };
 
   useEffect(() => {
-    fetchReportData();
-  }, [period]);
+    if (user) {
+      fetchReportData();
+    }
+  }, [period, role, user]);
 
   const handleApplyCustomDate = () => {
     if (!startDate || !endDate) {
@@ -122,18 +136,6 @@ const Reports = () => {
         return sum + val;
       }, 0);
 
-      const colorMap = {
-        'Pending': '#F59E0B',
-        'Assigned': '#3B82F6',
-        'In Progress': '#8B5CF6',
-        'Escalated': '#EF4444',
-        'Escalated to Manager': '#EF4444',
-        'Escalated to Warehouse Head': '#DC2626',
-        'Resolved': '#10B981',
-        'Completed': '#10B981',
-        'Closed': '#6B7280'
-      };
-
       statusList = reportData.statusBreakdown.map(item => {
         const name = item.name || item.status || 'Unknown';
         const count = item.count !== undefined ? item.count : (item.value !== undefined ? item.value : 0);
@@ -142,7 +144,7 @@ const Reports = () => {
           name,
           count,
           pct,
-          color: colorMap[name] || '#6366F1'
+          color: getStatusColor(name)
         };
       });
     }
@@ -166,7 +168,7 @@ const Reports = () => {
       highlight = reportData.mostCommonIssue ? `Most Common Issue: ${reportData.mostCommonIssue}` : 'No recurring issue pattern detected';
 
       kpiList = [
-        { label: 'Total Raised', value: s.totalRaised || 0, subtext: 'Complaints filed', color: '#2563EB', borderColor: '#BFDBFE' },
+        { label: 'Total Raised', value: s.totalRaised || 0, subtext: 'Complaints filed', color: '#1B4332', borderColor: '#A7D7C5' },
         { label: 'Resolved', value: s.resolvedCount || 0, subtext: 'Successfully resolved', color: '#16A34A', borderColor: '#BBF7D0' },
         { label: 'Open Escalated', value: s.escalatedCount || 0, subtext: 'Currently open escalated', color: '#DC2626', borderColor: '#FECACA' },
         { label: 'SLA Compliance', value: `${s.slaComplianceRate || 0}%`, subtext: 'On-time resolution rate', color: '#059669', borderColor: '#A7F3D0' },
@@ -187,7 +189,7 @@ const Reports = () => {
       highlight = reportData.mostCommonIssue ? `Most Common Issue: ${reportData.mostCommonIssue}` : 'No recurring issue pattern detected';
 
       kpiList = [
-        { label: 'Handled', value: ps.handledCount || 0, subtext: 'Claimed complaints', color: '#2563EB', borderColor: '#BFDBFE' },
+        { label: 'Handled', value: ps.handledCount || 0, subtext: 'Claimed complaints', color: '#1B4332', borderColor: '#A7D7C5' },
         { label: 'Completed', value: ps.completedCount || 0, subtext: 'Resolved by member', color: '#16A34A', borderColor: '#BBF7D0' },
         { label: 'Open Escalated', value: ps.escalatedCount || 0, subtext: 'Currently open escalated', color: '#DC2626', borderColor: '#FECACA' },
         { label: 'SLA Compliance', value: `${ps.slaComplianceRate || 0}%`, subtext: 'On-time completion', color: '#059669', borderColor: '#A7F3D0' },
@@ -209,7 +211,7 @@ const Reports = () => {
       highlight = reportData.mostCommonIssue ? `Most Common Issue: ${reportData.mostCommonIssue}` : 'No recurring issue pattern detected';
 
       kpiList = [
-        { label: 'Total Complaints', value: s.totalComplaints || 0, subtext: 'Total warehouse volume', color: '#2563EB', borderColor: '#BFDBFE' },
+        { label: 'Total Complaints', value: s.totalComplaints || 0, subtext: 'Total warehouse volume', color: '#1B4332', borderColor: '#A7D7C5' },
         { label: 'Resolved', value: s.resolvedCount || 0, subtext: 'Resolved complaints', color: '#16A34A', borderColor: '#BBF7D0' },
         { label: 'Escalated (Open)', value: s.totalEscalated || s.pendingCount || 0, subtext: 'Requiring manager action', color: '#DC2626', borderColor: '#FECACA' },
         { label: 'Escalation Rate', value: `${s.escalationRate || 0}%`, subtext: 'Pct ever escalated', color: '#7C3AED', borderColor: '#DDD6FE' },
@@ -244,7 +246,7 @@ const Reports = () => {
         : `Most Common Issue: ${s.mostCommonIssue || 'N/A'}`;
 
       kpiList = [
-        { label: 'Org Complaints', value: s.totalComplaints || 0, subtext: 'Org-wide volume', color: '#2563EB', borderColor: '#BFDBFE' },
+        { label: 'Org Complaints', value: s.totalComplaints || 0, subtext: 'Org-wide volume', color: '#1B4332', borderColor: '#A7D7C5' },
         { label: 'Open Escalated', value: s.currentlyEscalated || 0, subtext: 'Currently open escalated', color: '#DC2626', borderColor: '#FECACA' },
         { label: 'Resolved', value: s.resolvedCount || 0, subtext: 'Org-wide resolved', color: '#16A34A', borderColor: '#BBF7D0' },
         { label: 'Active Escalation %', value: `${s.activeEscalationRate || s.escalationRate || 0}%`, subtext: 'Open escalated pct', color: '#7C3AED', borderColor: '#DDD6FE' },
@@ -552,31 +554,11 @@ const Reports = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
                   {/* Chart 1: Status Breakdown */}
                   <ChartCard title="Complaint Status Analysis">
-                    {reportData.statusBreakdown && reportData.statusBreakdown.length > 0 ? (
-                      <ResponsiveContainer width="100%" height={270}>
-                        <PieChart margin={{ top: 15, right: 15, left: 15, bottom: 15 }}>
-                          <Pie 
-                            data={reportData.statusBreakdown} 
-                            dataKey="value" 
-                            nameKey="name" 
-                            cx="50%" 
-                            cy="40%" 
-                            innerRadius={36} 
-                            outerRadius={60} 
-                            paddingAngle={3}
-                            label={({ name, value, percentage }) => `${name.replace(' to Manager', '')}: ${value} (${percentage}%)`}
-                            labelLine={{ strokeWidth: 1 }}
-                            style={{ fontSize: '11px', fontWeight: '600' }}
-                          >
-                            {reportData.statusBreakdown.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <Tooltip contentStyle={{ backgroundColor: chartTooltipBg, borderColor: chartTooltipBorder, borderRadius: '8px' }} />
-                          <Legend verticalAlign="bottom" height={36} wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    ) : <EmptyStateText message="No status data for selected date range" />}
+                    <StatusDonutChart 
+                      data={reportData.statusBreakdown} 
+                      chartTooltipBg={chartTooltipBg} 
+                      chartTooltipBorder={chartTooltipBorder} 
+                    />
                   </ChartCard>
 
                   {/* Chart 2: Complaint Type Breakdown */}
@@ -596,7 +578,7 @@ const Reports = () => {
                           />
                           <YAxis stroke={chartTextColor} fontSize={12} allowDecimals={false} />
                           <Tooltip contentStyle={{ backgroundColor: chartTooltipBg, borderColor: chartTooltipBorder, borderRadius: '8px' }} />
-                          <Bar dataKey="count" name="Complaints" fill="#3B82F6" radius={[4, 4, 0, 0]} barSize={18} />
+                          <Bar dataKey="count" name="Complaints" fill="#2D6A4F" radius={[4, 4, 0, 0]} barSize={18} />
                         </BarChart>
                       </ResponsiveContainer>
                     ) : <EmptyStateText message="No type data for selected date range" />}
@@ -654,7 +636,7 @@ const Reports = () => {
                           <YAxis stroke={chartTextColor} fontSize={12} allowDecimals={false} />
                           <Tooltip contentStyle={{ backgroundColor: chartTooltipBg, borderColor: chartTooltipBorder, borderRadius: '8px' }} />
                           <Legend verticalAlign="top" wrapperStyle={{ paddingBottom: '10px' }} />
-                          <Bar dataKey="totalCount" name="Total Raised" fill="#3B82F6" radius={[4, 4, 0, 0]} barSize={14} />
+                          <Bar dataKey="totalCount" name="Total Raised" fill="#1B4332" radius={[4, 4, 0, 0]} barSize={14} />
                           <Bar dataKey="resolvedCount" name="Resolved" fill="#10B981" radius={[4, 4, 0, 0]} barSize={14} />
                           <Bar dataKey="escalatedCount" name="Escalated" fill="#EF4444" radius={[4, 4, 0, 0]} barSize={14} />
                         </BarChart>
@@ -727,37 +709,11 @@ const Reports = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
                   {/* Status Breakdown Chart */}
                   <ChartCard title="My Status Breakdown">
-                    {reportData.statusBreakdown && reportData.statusBreakdown.length > 0 ? (
-                      <ResponsiveContainer width="100%" height={260}>
-                        <PieChart margin={{ top: 15, bottom: 15, left: 10, right: 10 }}>
-                          <Pie 
-                            data={reportData.statusBreakdown} 
-                            dataKey="value" 
-                            nameKey="name" 
-                            cx="50%" 
-                            cy="45%" 
-                            innerRadius={40}
-                            outerRadius={65} 
-                            paddingAngle={4}
-                          >
-                            {reportData.statusBreakdown.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <Tooltip contentStyle={{ backgroundColor: chartTooltipBg, borderColor: chartTooltipBorder, borderRadius: '8px' }} />
-                          <Legend 
-                            verticalAlign="bottom" 
-                            height={40}
-                            formatter={(value, entry) => {
-                              const item = entry?.payload || {};
-                              const count = item.value || 0;
-                              const pct = item.percentage !== undefined ? item.percentage : 100;
-                              return `${value.replace(' to Manager', '')}: ${count} (${pct}%)`;
-                            }}
-                          />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    ) : <EmptyStateText message="No complaint activity for selected date range" />}
+                    <StatusDonutChart 
+                      data={reportData.statusBreakdown} 
+                      chartTooltipBg={chartTooltipBg} 
+                      chartTooltipBorder={chartTooltipBorder} 
+                    />
                   </ChartCard>
 
                   {/* Subtype Breakdown Chart */}
@@ -784,7 +740,7 @@ const Reports = () => {
                           <XAxis dataKey="label" stroke={chartTextColor} fontSize={11} />
                           <YAxis stroke={chartTextColor} fontSize={11} allowDecimals={false} domain={[0, (dataMax) => Math.max(dataMax + 1, 4)]} />
                           <Tooltip contentStyle={{ backgroundColor: chartTooltipBg, borderColor: chartTooltipBorder, borderRadius: '8px' }} />
-                          <Line type="monotone" dataKey="count" name="Warehouse Complaints" stroke="#6366F1" strokeWidth={3} dot={{ r: 4 }} />
+                          <Line type="monotone" dataKey="count" name="Warehouse Complaints" stroke="#2D6A4F" strokeWidth={3} dot={{ r: 4 }} />
                         </LineChart>
                       </ResponsiveContainer>
                     ) : <EmptyStateText message="No volume trend data for selected date range" />}
@@ -800,7 +756,7 @@ const Reports = () => {
                         <XAxis dataKey="bucket" stroke={chartTextColor} fontSize={11} />
                         <YAxis stroke={chartTextColor} fontSize={11} allowDecimals={false} />
                         <Tooltip contentStyle={{ backgroundColor: chartTooltipBg, borderColor: chartTooltipBorder, borderRadius: '8px' }} />
-                        <Bar dataKey="count" name="Open Complaints" fill="#3B82F6" radius={[4, 4, 0, 0]} barSize={24} />
+                        <Bar dataKey="count" name="Open Complaints" fill="#2D6A4F" radius={[4, 4, 0, 0]} barSize={24} />
                       </BarChart>
                     </ResponsiveContainer>
                   ) : (
@@ -926,37 +882,11 @@ const Reports = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px', marginTop: '20px' }}>
                   {/* Status Breakdown */}
                   <ChartCard title="Complaint Status Breakdown">
-                    {reportData.statusBreakdown && reportData.statusBreakdown.length > 0 ? (
-                      <ResponsiveContainer width="100%" height={260}>
-                        <PieChart margin={{ top: 15, bottom: 15, left: 10, right: 10 }}>
-                          <Pie 
-                            data={reportData.statusBreakdown} 
-                            dataKey="value" 
-                            nameKey="name" 
-                            cx="50%" 
-                            cy="45%" 
-                            innerRadius={40}
-                            outerRadius={65} 
-                            paddingAngle={4}
-                          >
-                            {reportData.statusBreakdown.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <Tooltip contentStyle={{ backgroundColor: chartTooltipBg, borderColor: chartTooltipBorder, borderRadius: '8px' }} />
-                          <Legend 
-                            verticalAlign="bottom" 
-                            height={40}
-                            formatter={(value, entry) => {
-                              const item = entry?.payload || {};
-                              const count = item.value || 0;
-                              const pct = item.percentage !== undefined ? item.percentage : 100;
-                              return `${value.replace(' to Manager', '')}: ${count} (${pct}%)`;
-                            }}
-                          />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    ) : <EmptyStateText message="No status data for selected date range" />}
+                    <StatusDonutChart 
+                      data={reportData.statusBreakdown} 
+                      chartTooltipBg={chartTooltipBg} 
+                      chartTooltipBorder={chartTooltipBorder} 
+                    />
                   </ChartCard>
 
                   {/* Subtype Breakdown */}
@@ -999,7 +929,7 @@ const Reports = () => {
                         <XAxis dataKey="bucket" stroke={chartTextColor} fontSize={11} />
                         <YAxis stroke={chartTextColor} fontSize={11} allowDecimals={false} />
                         <Tooltip contentStyle={{ backgroundColor: chartTooltipBg, borderColor: chartTooltipBorder, borderRadius: '8px' }} />
-                        <Bar dataKey="count" name="Open Complaints" fill="#3B82F6" radius={[4, 4, 0, 0]} barSize={24} />
+                        <Bar dataKey="count" name="Open Complaints" fill="#2D6A4F" radius={[4, 4, 0, 0]} barSize={24} />
                       </BarChart>
                     </ResponsiveContainer>
                   ) : (
@@ -1074,7 +1004,7 @@ const Reports = () => {
                       Global oversight across all 5 warehouses, Sales Executives, and escalation queues.
                     </p>
                   </div>
-                  <span style={{ fontSize: '11px', fontWeight: '600', padding: '4px 10px', borderRadius: '12px', backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#3B82F6' }}>
+                  <span style={{ fontSize: '11px', fontWeight: '600', padding: '4px 10px', borderRadius: '12px', backgroundColor: 'var(--brand-primary-light, rgba(27, 67, 50, 0.15))', color: 'var(--brand-primary)' }}>
                     Global Org Scope
                   </span>
                 </div>
@@ -1258,19 +1188,11 @@ const Reports = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px', marginTop: '20px' }}>
                   {/* Status Breakdown */}
                   <ChartCard title="Org-Wide Complaint Status Breakdown">
-                    {reportData.statusBreakdown && reportData.statusBreakdown.length > 0 ? (
-                      <ResponsiveContainer width="100%" height={260}>
-                        <PieChart margin={{ top: 15, bottom: 15, left: 10, right: 10 }}>
-                          <Pie data={reportData.statusBreakdown} dataKey="value" nameKey="name" cx="50%" cy="45%" innerRadius={40} outerRadius={65} paddingAngle={4}>
-                            {reportData.statusBreakdown.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <Tooltip contentStyle={{ backgroundColor: chartTooltipBg, borderColor: chartTooltipBorder, borderRadius: '8px' }} />
-                          <Legend verticalAlign="bottom" height={40} formatter={(value, entry) => `${value}: ${entry?.payload?.value || 0}`} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    ) : <EmptyStateText message="No status data for selected date range" />}
+                    <StatusDonutChart 
+                      data={reportData.statusBreakdown} 
+                      chartTooltipBg={chartTooltipBg} 
+                      chartTooltipBorder={chartTooltipBorder} 
+                    />
                   </ChartCard>
 
                   {/* Subtype Analysis */}
@@ -1313,7 +1235,7 @@ const Reports = () => {
                         <XAxis dataKey="bucket" stroke={chartTextColor} fontSize={11} />
                         <YAxis stroke={chartTextColor} fontSize={11} allowDecimals={false} />
                         <Tooltip contentStyle={{ backgroundColor: chartTooltipBg, borderColor: chartTooltipBorder, borderRadius: '8px' }} />
-                        <Bar dataKey="count" name="Open Complaints" fill="#3B82F6" radius={[4, 4, 0, 0]} barSize={24} />
+                        <Bar dataKey="count" name="Open Complaints" fill="#2D6A4F" radius={[4, 4, 0, 0]} barSize={24} />
                       </BarChart>
                     </ResponsiveContainer>
                   ) : (
@@ -1414,7 +1336,7 @@ const Reports = () => {
                 {/* Header Banner */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #E2E8F0', paddingBottom: '14px', marginBottom: '18px' }}>
                   <div>
-                    <div style={{ fontSize: '10px', fontWeight: '700', color: '#2563EB', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    <div style={{ fontSize: '10px', fontWeight: '700', color: '#1B4332', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                       CUSTOMER FEEDBACK & COMPLAINT MANAGEMENT SYSTEM (CFMS)
                     </div>
                     <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#0F172A', margin: '4px 0 2px 0' }}>
@@ -1425,7 +1347,7 @@ const Reports = () => {
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ padding: '4px 10px', backgroundColor: '#EFF6FF', color: '#1D4ED8', borderRadius: '6px', fontSize: '11px', fontWeight: '700', border: '1px solid #BFDBFE' }}>
+                    <div style={{ padding: '4px 10px', backgroundColor: '#E8F5E9', color: '#1B4332', borderRadius: '6px', fontSize: '11px', fontWeight: '700', border: '1px solid #C8E6C9' }}>
                       1-PAGE EXECUTIVE SUMMARY
                     </div>
                     <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '6px' }}>
@@ -1485,7 +1407,7 @@ const Reports = () => {
                           <span style={{ color: '#475569', fontWeight: '500', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }} title={tp.name}>
                             {tp.name}
                           </span>
-                          <span style={{ fontWeight: '700', color: '#2563EB', backgroundColor: '#EFF6FF', padding: '2px 8px', borderRadius: '10px', fontSize: '10px', flexShrink: 0 }}>
+                          <span style={{ fontWeight: '700', color: '#1B4332', backgroundColor: '#E8F5E9', padding: '2px 8px', borderRadius: '10px', fontSize: '10px', flexShrink: 0 }}>
                             {tp.count} complaints
                           </span>
                         </div>
@@ -1548,9 +1470,143 @@ const EmptyStateText = ({ message }) => (
   </div>
 );
 
+const StatusDonutChart = ({ data = [], chartTooltipBg, chartTooltipBorder }) => {
+  const validData = Array.isArray(data) ? data : [];
+  const totalCount = validData.reduce((sum, item) => sum + (Number(item.value) || Number(item.count) || 0), 0);
+
+  if (validData.length === 0 || totalCount === 0) {
+    return <EmptyStateText message="No status data for selected date range" />;
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%' }}>
+      {/* Donut Chart with Center Metric */}
+      <div style={{ width: '100%', height: '175px', position: 'relative' }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+            <Pie
+              data={validData}
+              dataKey="value"
+              nameKey="name"
+              cx="50%"
+              cy="50%"
+              innerRadius={46}
+              outerRadius={70}
+              paddingAngle={3}
+              isAnimationActive={false}
+            >
+              {validData.map((entry, index) => (
+                <Cell key={`status-cell-${index}`} fill={getStatusColor(entry.name)} />
+              ))}
+            </Pie>
+            <Tooltip
+              contentStyle={{
+                backgroundColor: chartTooltipBg,
+                borderColor: chartTooltipBorder,
+                borderRadius: '8px',
+                fontSize: '12px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+              }}
+              formatter={(val, name, item) => {
+                const count = Number(val) || 0;
+                const pct = item?.payload?.percentage !== undefined 
+                  ? item.payload.percentage 
+                  : (totalCount > 0 ? Math.round((count / totalCount) * 100) : 0);
+                return [`${count} complaints (${pct}%)`, name];
+              }}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+
+        {/* Center Total Count Display */}
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          textAlign: 'center',
+          pointerEvents: 'none',
+          lineHeight: 1.1
+        }}>
+          <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--text-primary)' }}>
+            {totalCount}
+          </div>
+          <div style={{ fontSize: '10px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Total
+          </div>
+        </div>
+      </div>
+
+      {/* Clean, Non-Overlapping Structured Legend Grid */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))',
+        gap: '8px 12px',
+        padding: '12px 14px',
+        backgroundColor: 'var(--bg-secondary)',
+        borderRadius: '8px',
+        border: '1px solid var(--border-color)',
+        boxSizing: 'border-box'
+      }}>
+        {validData.map((item, idx) => {
+          const color = getStatusColor(item.name);
+          const count = item.value !== undefined ? item.value : (item.count || 0);
+          const pct = item.percentage !== undefined 
+            ? item.percentage 
+            : (totalCount > 0 ? Math.round((count / totalCount) * 100) : 0);
+          
+          // Clean concise name formatting for legend grid
+          const displayLabel = item.name
+            .replace('Escalated to Warehouse Head', 'Esc. to WH Head')
+            .replace('Escalated to Manager', 'Esc. to Manager');
+
+          return (
+            <div 
+              key={idx} 
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '8px', 
+                fontSize: '12px',
+                minWidth: 0
+              }}
+            >
+              <span style={{ 
+                width: '10px', 
+                height: '10px', 
+                borderRadius: '50%', 
+                backgroundColor: color, 
+                flexShrink: 0,
+                boxShadow: `0 0 0 2px ${color}33`
+              }} />
+              <span 
+                style={{ 
+                  color: 'var(--text-secondary)', 
+                  fontWeight: '500', 
+                  fontSize: '11px',
+                  whiteSpace: 'nowrap', 
+                  overflow: 'hidden', 
+                  textOverflow: 'ellipsis',
+                  flex: 1
+                }} 
+                title={item.name}
+              >
+                {displayLabel}
+              </span>
+              <span style={{ fontWeight: '700', color: 'var(--text-primary)', fontSize: '11px', whiteSpace: 'nowrap', marginLeft: 'auto' }}>
+                {count} <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 'normal' }}>({pct}%)</span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 const StatSummaryCard = ({ title, value, icon, color, subtitle }) => {
   const colorMap = {
-    blue: { bg: 'rgba(59, 130, 246, 0.1)', text: '#3B82F6' },
+    blue: { bg: 'var(--brand-primary-light, rgba(27, 67, 50, 0.12))', text: 'var(--brand-primary)' },
     green: { bg: 'rgba(16, 185, 129, 0.1)', text: '#10B981' },
     red: { bg: 'rgba(239, 68, 68, 0.1)', text: '#EF4444' },
     amber: { bg: 'rgba(245, 158, 11, 0.1)', text: '#F59E0B' },

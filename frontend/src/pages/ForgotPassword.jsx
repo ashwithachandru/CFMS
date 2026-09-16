@@ -296,7 +296,7 @@ const ForgotPassword = () => {
         {step === STEP_OTP && (
           <>
             <div className="text-center mb-6">
-              <div style={{ width: '52px', height: '52px', borderRadius: '14px', background: 'rgba(59,130,246,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+              <div style={{ width: '52px', height: '52px', borderRadius: '14px', background: 'var(--brand-primary-light, rgba(27,67,50,0.12))', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
                 <ShieldCheck size={26} style={{ color: 'var(--color-primary)' }} />
               </div>
               <h2 className="text-2xl font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Enter OTP</h2>

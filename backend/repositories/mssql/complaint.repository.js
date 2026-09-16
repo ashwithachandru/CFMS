@@ -4,25 +4,51 @@ const mailer = require('../../config/mailer');
 function triggerEscalationEmail(complaintId) {
   setImmediate(async () => {
     try {
+      const pool = getPool();
+
+      // Persistent atomic guard: try setting escalation_email_sent_at only if it is currently NULL
+      const updateRes = await pool.request()
+        .input('id', sql.Int, parseInt(complaintId, 10))
+        .query(`
+          UPDATE Complaints 
+          SET escalation_email_sent_at = GETDATE()
+          WHERE id = @id AND escalation_email_sent_at IS NULL
+        `);
+
+      // If rowsAffected is 0, this notification was already sent or won by another concurrent thread
+      if (updateRes.rowsAffected && updateRes.rowsAffected[0] === 0) {
+        console.log(`[MAIL IDEMPOTENT] Escalation email already dispatched for complaint ID ${complaintId}. Skipping duplicate.`);
+        return;
+      }
+
       const repo = new ComplaintRepository();
       const details = await repo.getNotificationDetails(complaintId);
       const recipients = details?.managerEmails?.length > 0 ? details.managerEmails : (details?.managerEmail ? [details.managerEmail] : []);
       if (details && recipients.length > 0) {
-        await mailer.sendEscalationEmail({
-          email: recipients,
-          managerName: details.managerName,
-          complaintNumber: details.complaintNumber,
-          salesExecutiveName: details.salesExecutiveName,
-          customerCode: details.customerCode,
-          invoiceNumber: details.invoiceNumber,
-          complaintType: details.complaintType,
-          complaintSubtype: details.complaintSubtype
-        });
+        try {
+          await mailer.sendEscalationEmail({
+            email: recipients,
+            managerName: details.managerName,
+            complaintNumber: details.complaintNumber,
+            salesExecutiveName: details.salesExecutiveName,
+            customerCode: details.customerCode,
+            invoiceNumber: details.invoiceNumber,
+            complaintType: details.complaintType,
+            complaintSubtype: details.complaintSubtype
+          });
+          console.log(`[MAIL SUCCESS] Escalation email sent for complaint ${details.complaintNumber} (ID: ${complaintId}) to: ${recipients.join(', ')}`);
+        } catch (mailErr) {
+          // On mail delivery failure, reset escalation_email_sent_at to NULL so it can be retried safely
+          console.error(`[MAIL ERROR] Failed sending escalation email for complaint ID ${complaintId}:`, mailErr.message);
+          await pool.request()
+            .input('id', sql.Int, parseInt(complaintId, 10))
+            .query(`UPDATE Complaints SET escalation_email_sent_at = NULL WHERE id = @id`);
+        }
       } else {
         console.warn(`[MAIL WARN] Escalation email skipped for complaint ID ${complaintId}: No active Warehouse Manager found for warehouse ID ${details?.warehouseId || 'unknown'}.`);
       }
     } catch (err) {
-      console.error(`[MAIL ERROR] Failed sending escalation email for complaint ID ${complaintId}:`, err.message);
+      console.error(`[MAIL ERROR] Escalation notification handler error for complaint ID ${complaintId}:`, err.message);
     }
   });
 }
@@ -69,85 +95,99 @@ class ComplaintRepository {
 
   async create(data) {
     const pool = getPool();
+    const transaction = new sql.Transaction(pool);
+    await transaction.begin();
 
-    // 1. Auto-generate next complaint_number e.g. CMP-0001
-    const maxRes = await pool.request().query(`
-      SELECT MAX(CAST(SUBSTRING(complaint_number, 5, 8) AS INT)) AS maxSeq 
-      FROM Complaints
-      WHERE ISNUMERIC(SUBSTRING(complaint_number, 5, 8)) = 1
-    `);
-    const nextSeq = (maxRes.recordset[0].maxSeq || 0) + 1;
-    const complaintNumber = `CMP-${String(nextSeq).padStart(4, '0')}`;
-
-    // 2. Lookup Warehouse Team user for auto-assignment based on selected warehouse_id
-    const teamRes = await pool.request()
-      .input('warehouse_id', sql.Int, data.warehouse_id)
-      .query(`
-        SELECT TOP 1 id FROM Users 
-        WHERE role = 'Warehouse Team' AND warehouse_id = @warehouse_id AND status = 'Active'
-      `);
-    const assignedTeamId = teamRes.recordset[0]?.id || null;
-
-    // Fetch dynamic SLA window from SystemSettings (default to 24 if missing)
-    let slaWindowHours = 24;
     try {
-      const settingRes = await pool.request().query(`
-        SELECT setting_value FROM SystemSettings WHERE setting_key = 'sla_window_hours'
+      // 1. Auto-generate next complaint_number e.g. CMP-0001
+      const maxRes = await new sql.Request(transaction).query(`
+        SELECT MAX(CAST(SUBSTRING(complaint_number, 5, 8) AS INT)) AS maxSeq 
+        FROM Complaints
+        WHERE ISNUMERIC(SUBSTRING(complaint_number, 5, 8)) = 1
       `);
-      if (settingRes.recordset.length > 0 && !isNaN(parseInt(settingRes.recordset[0].setting_value, 10))) {
-        slaWindowHours = parseInt(settingRes.recordset[0].setting_value, 10);
+      const nextSeq = (maxRes.recordset[0].maxSeq || 0) + 1;
+      const complaintNumber = `CMP-${String(nextSeq).padStart(4, '0')}`;
+
+      // 2. Lookup Warehouse Team user for auto-assignment based on selected warehouse_id
+      const teamRes = await new sql.Request(transaction)
+        .input('warehouse_id', sql.Int, data.warehouse_id ? parseInt(data.warehouse_id, 10) : null)
+        .query(`
+          SELECT TOP 1 id FROM Users 
+          WHERE role = 'Warehouse Team' AND warehouse_id = @warehouse_id AND status = 'Active'
+        `);
+      const assignedTeamId = teamRes.recordset[0]?.id || null;
+
+      // Fetch dynamic SLA window from SystemSettings (default to 24 if missing)
+      let slaWindowHours = 24;
+      try {
+        const settingRes = await new sql.Request(transaction).query(`
+          SELECT setting_value FROM SystemSettings WHERE setting_key = 'sla_window_hours'
+        `);
+        if (settingRes.recordset.length > 0 && !isNaN(parseInt(settingRes.recordset[0].setting_value, 10))) {
+          slaWindowHours = parseInt(settingRes.recordset[0].setting_value, 10);
+        }
+      } catch (e) {
+        slaWindowHours = 24;
       }
-    } catch (e) {
-      slaWindowHours = 24;
+
+      // 3. Insert Complaint into database
+      const insertRes = await new sql.Request(transaction)
+        .input('complaint_number', sql.VarChar, complaintNumber)
+        .input('sales_executive_id', sql.Int, data.sales_executive_id)
+        .input('warehouse_id', sql.Int, data.warehouse_id ? parseInt(data.warehouse_id, 10) : null)
+        .input('customer_code', sql.VarChar, data.customer_code)
+        .input('invoice_number', sql.VarChar, data.invoice_number)
+        .input('product_name', sql.NVarChar, data.product_name ? data.product_name.trim() : null)
+        .input('complaint_type_id', sql.Int, data.complaint_type_id)
+        .input('complaint_subtype_id', sql.Int, data.complaint_subtype_id || null)
+        .input('description', sql.NVarChar, data.description)
+        .input('attachment_url', sql.VarChar, data.attachment_url || null)
+        .input('invoice_url', sql.VarChar, data.invoice_url || null)
+        .input('ocr_text', sql.NVarChar, data.ocr_text || null)
+        .input('submission_type', sql.VarChar, data.submission_type || (data.invoice_url ? 'ocr' : 'manual'))
+        .input('assigned_team_id', sql.Int, assignedTeamId)
+        .input('sla_hours', sql.Int, slaWindowHours)
+        .query(`
+          INSERT INTO Complaints (
+            complaint_number, sales_executive_id, warehouse_id, customer_code, invoice_number, product_name,
+            complaint_type_id, complaint_subtype_id, description, attachment_url, invoice_url, ocr_text, submission_type, status, 
+            assigned_warehouse_team_id, raised_at, warehouse_team_deadline
+          )
+          OUTPUT INSERTED.id, INSERTED.complaint_number
+          VALUES (
+            @complaint_number, @sales_executive_id, @warehouse_id, @customer_code, @invoice_number, @product_name,
+            @complaint_type_id, @complaint_subtype_id, @description, @attachment_url, @invoice_url, @ocr_text, @submission_type, 'Assigned', 
+            @assigned_team_id, GETDATE(), DATEADD(hour, @sla_hours, GETDATE())
+          )
+        `);
+
+      const createdId = insertRes.recordset[0].id;
+
+      // 4. Log initial ComplaintHistory entry
+      await new sql.Request(transaction)
+        .input('complaint_id', sql.Int, createdId)
+        .input('performed_by', sql.Int, data.sales_executive_id)
+        .input('notes', sql.NVarChar, `Complaint ${complaintNumber} raised by Sales Executive`)
+        .query(`
+          INSERT INTO ComplaintHistory (complaint_id, action, performed_by, notes)
+          VALUES (@complaint_id, 'Created', @performed_by, @notes)
+        `);
+
+      await transaction.commit();
+
+      return {
+        id: createdId,
+        complaint_number: complaintNumber,
+        assigned_warehouse_team_id: assignedTeamId
+      };
+    } catch (err) {
+      try {
+        await transaction.rollback();
+      } catch (rollbackErr) {
+        console.error('[DB ROLLBACK ERROR]', rollbackErr.message);
+      }
+      throw err;
     }
-
-    // 3. Insert Complaint into database
-    const insertRes = await pool.request()
-      .input('complaint_number', sql.VarChar, complaintNumber)
-      .input('sales_executive_id', sql.Int, data.sales_executive_id)
-      .input('warehouse_id', sql.Int, data.warehouse_id ? parseInt(data.warehouse_id, 10) : null)
-      .input('customer_code', sql.VarChar, data.customer_code)
-      .input('invoice_number', sql.VarChar, data.invoice_number)
-      .input('complaint_type_id', sql.Int, data.complaint_type_id)
-      .input('complaint_subtype_id', sql.Int, data.complaint_subtype_id || null)
-      .input('description', sql.NVarChar, data.description)
-      .input('attachment_url', sql.VarChar, data.attachment_url || null)
-      .input('invoice_url', sql.VarChar, data.invoice_url || null)
-      .input('ocr_text', sql.NVarChar, data.ocr_text || null)
-      .input('submission_type', sql.VarChar, data.submission_type || (data.invoice_url ? 'ocr' : 'manual'))
-      .input('assigned_team_id', sql.Int, assignedTeamId)
-      .input('sla_hours', sql.Int, slaWindowHours)
-      .query(`
-        INSERT INTO Complaints (
-          complaint_number, sales_executive_id, warehouse_id, customer_code, invoice_number, 
-          complaint_type_id, complaint_subtype_id, description, attachment_url, invoice_url, ocr_text, submission_type, status, 
-          assigned_warehouse_team_id, raised_at, warehouse_team_deadline
-        )
-        OUTPUT INSERTED.id, INSERTED.complaint_number
-        VALUES (
-          @complaint_number, @sales_executive_id, @warehouse_id, @customer_code, @invoice_number, 
-          @complaint_type_id, @complaint_subtype_id, @description, @attachment_url, @invoice_url, @ocr_text, @submission_type, 'Assigned', 
-          @assigned_team_id, GETDATE(), DATEADD(hour, @sla_hours, GETDATE())
-        )
-      `);
-
-    const createdId = insertRes.recordset[0].id;
-
-    // 4. Log initial ComplaintHistory entry
-    await pool.request()
-      .input('complaint_id', sql.Int, createdId)
-      .input('performed_by', sql.Int, data.sales_executive_id)
-      .input('notes', sql.NVarChar, `Complaint ${complaintNumber} raised by Sales Executive`)
-      .query(`
-        INSERT INTO ComplaintHistory (complaint_id, action, performed_by, notes)
-        VALUES (@complaint_id, 'Created', @performed_by, @notes)
-      `);
-
-    return {
-      id: createdId,
-      complaint_number: complaintNumber,
-      assigned_warehouse_team_id: assignedTeamId
-    };
   }
 
   async checkAndAutoEscalate() {
@@ -183,7 +223,7 @@ class ComplaintRepository {
           VALUES (@complaint_id, @action, @notes)
         `);
 
-      // Trigger automated escalation email to Warehouse Manager
+      // Trigger automated escalation email to Warehouse Manager (guarded persistently)
       triggerEscalationEmail(comp.id);
     }
 
@@ -192,10 +232,6 @@ class ComplaintRepository {
 
   async findAll(userRole, userId, warehouseId, sortBy = 'date', history = false) {
     const pool = getPool();
-
-    // 1. Automatic Escalation Check for expired SLAs past 24 hours
-    await this.checkAndAutoEscalate();
-
 
     let whereClause = 'WHERE 1=1';
 
@@ -250,6 +286,7 @@ class ComplaintRepository {
         c.complaint_number AS id_display,
         c.customer_code AS customer,
         c.invoice_number AS invoice,
+        c.product_name AS product,
         ct.name AS type,
         cs.name AS subtype,
         (u_sales.first_name + ' ' + u_sales.last_name) AS raisedBy,
@@ -305,6 +342,7 @@ class ComplaintRepository {
         numeric_id: row.id,
         customer: row.customer,
         invoice: row.invoice,
+        product: row.product || '',
         type: row.type,
         subtype: row.subtype || 'General',
         raisedBy: row.raisedBy,
@@ -330,7 +368,7 @@ class ComplaintRepository {
     });
   }
 
-  async updateStatus(complaintIdOrNumber, targetStatusOrAction, userId, userRole) {
+  async updateStatus(complaintIdOrNumber, targetStatusOrAction, userId, userRole, warehouseId = null) {
     const pool = getPool();
 
     // 1. Resolve Complaint
@@ -343,10 +381,33 @@ class ComplaintRepository {
       `);
 
     if (compRes.recordset.length === 0) {
-      throw new Error(`Complaint ${complaintIdOrNumber} not found.`);
+      const notFoundErr = new Error(`Complaint ${complaintIdOrNumber} not found.`);
+      notFoundErr.statusCode = 404;
+      throw notFoundErr;
     }
 
     const comp = compRes.recordset[0];
+
+    // Authorization validation BEFORE any state change (BUG-02 Fix)
+    if (userRole === 'Sales Executive') {
+      const err = new Error('Access Denied: Sales Executives cannot change complaint action status.');
+      err.statusCode = 403;
+      throw err;
+    }
+
+    if (userRole === 'Warehouse Team' || userRole === 'Warehouse Manager' || userRole === 'Manager') {
+      const userWhId = parseInt(warehouseId || 0, 10);
+      const compWhId = comp.warehouse_id !== null && comp.warehouse_id !== undefined ? parseInt(comp.warehouse_id, 10) : null;
+
+      // If complaint is assigned to a specific warehouse, ensure user belongs to that warehouse.
+      // If compWhId is NULL (global/shared complaint queue), allow Warehouse Team / Manager to claim and act.
+      if (compWhId !== null && compWhId !== userWhId) {
+        const err = new Error('Access Denied: You do not have permission to modify complaints belonging to another warehouse.');
+        err.statusCode = 403;
+        throw err;
+      }
+    }
+
     let newStatus = comp.status;
     let actionName = targetStatusOrAction;
 
@@ -357,7 +418,7 @@ class ComplaintRepository {
       newStatus = 'Resolved';
       actionName = 'Complete';
     } else if (targetStatusOrAction === 'Escalate' || targetStatusOrAction === 'Escalated' || targetStatusOrAction === 'Escalated to Manager' || targetStatusOrAction === 'Escalated to Warehouse Head') {
-      if (userRole === 'Warehouse Manager') {
+      if (userRole === 'Warehouse Manager' || userRole === 'Manager') {
         newStatus = 'Escalated to Warehouse Head';
         actionName = 'Escalated to Warehouse Head';
       } else {
@@ -420,10 +481,7 @@ class ComplaintRepository {
   async getStats(userRole, userId, warehouseId) {
     const pool = getPool();
 
-    // Trigger auto-escalations first so stats match real-time DB state
-    await this.findAll(userRole, userId, warehouseId);
-
-    if (userRole === 'Warehouse Manager') {
+    if (userRole === 'Warehouse Manager' || userRole === 'Manager') {
       const query = `
         SELECT 
           COALESCE(SUM(CASE WHEN c.warehouse_id = @warehouse_id THEN 1 ELSE 0 END), 0) AS totalCount,
@@ -477,38 +535,57 @@ class ComplaintRepository {
     };
   }
 
-  async findById(id) {
+  async findById(id, userRole = null, userId = null, warehouseId = null) {
     const pool = getPool();
-    const result = await pool.request()
-      .input('id', sql.VarChar, String(id))
-      .query(`
-        SELECT 
-          c.id AS db_id,
-          c.complaint_number AS id_display,
-          c.customer_code AS customer,
-          c.invoice_number AS invoice,
-          ct.name AS type,
-          cs.name AS subtype,
-          (u_sales.first_name + ' ' + u_sales.last_name) AS raisedBy,
-          CONVERT(VARCHAR(20), c.raised_at, 106) AS date,
-          CONVERT(VARCHAR(30), c.raised_at, 126) AS raised_at_iso,
-          c.status,
-          ISNULL(w.name, 'Global / Shared Queue') AS warehouse_name,
-          c.attachment_url,
-          c.invoice_url,
-          c.ocr_text,
-          c.submission_type,
-          DATEDIFF(hour, GETDATE(), c.warehouse_team_deadline) AS hours_left,
-          c.taken_action_by,
-          c.sales_executive_id,
-          c.warehouse_id
-        FROM Complaints c
-        JOIN Users u_sales ON c.sales_executive_id = u_sales.id
-        LEFT JOIN Warehouses w ON c.warehouse_id = w.id
-        JOIN ComplaintTypes ct ON c.complaint_type_id = ct.id
-        LEFT JOIN ComplaintSubtypes cs ON c.complaint_subtype_id = cs.id
-        WHERE c.complaint_number = @id OR CAST(c.id AS VARCHAR) = @id
-      `);
+    const req = pool.request()
+      .input('id', sql.VarChar, String(id));
+
+    let scopeClause = '';
+    if (userRole === 'Sales Executive' && userId) {
+      req.input('user_id', sql.Int, parseInt(userId, 10));
+      scopeClause = 'AND c.sales_executive_id = @user_id';
+    } else if (userRole === 'Warehouse Team' && warehouseId) {
+      req.input('warehouse_id', sql.Int, parseInt(warehouseId, 10));
+      scopeClause = 'AND (c.warehouse_id = @warehouse_id OR c.warehouse_id IS NULL)';
+    } else if ((userRole === 'Warehouse Manager' || userRole === 'Manager') && warehouseId) {
+      req.input('warehouse_id', sql.Int, parseInt(warehouseId, 10));
+      scopeClause = `AND (
+        c.warehouse_id = @warehouse_id 
+        OR c.warehouse_id IS NULL 
+        OR (c.warehouse_id IS NULL AND c.taken_action_by IN (SELECT id FROM Users WHERE warehouse_id = @warehouse_id))
+      )`;
+    }
+
+    const result = await req.query(`
+      SELECT 
+        c.id AS db_id,
+        c.complaint_number AS id_display,
+        c.customer_code AS customer,
+        c.invoice_number AS invoice,
+        c.product_name AS product,
+        ct.name AS type,
+        cs.name AS subtype,
+        (u_sales.first_name + ' ' + u_sales.last_name) AS raisedBy,
+        CONVERT(VARCHAR(20), c.raised_at, 106) AS date,
+        CONVERT(VARCHAR(30), c.raised_at, 126) AS raised_at_iso,
+        c.status,
+        ISNULL(w.name, 'Global / Shared Queue') AS warehouse_name,
+        c.attachment_url,
+        c.invoice_url,
+        c.ocr_text,
+        c.submission_type,
+        DATEDIFF(hour, GETDATE(), c.warehouse_team_deadline) AS hours_left,
+        c.taken_action_by,
+        c.sales_executive_id,
+        c.warehouse_id
+      FROM Complaints c
+      JOIN Users u_sales ON c.sales_executive_id = u_sales.id
+      LEFT JOIN Warehouses w ON c.warehouse_id = w.id
+      JOIN ComplaintTypes ct ON c.complaint_type_id = ct.id
+      LEFT JOIN ComplaintSubtypes cs ON c.complaint_subtype_id = cs.id
+      WHERE (c.complaint_number = @id OR CAST(c.id AS VARCHAR) = @id)
+        ${scopeClause}
+    `);
 
     const row = result.recordset[0];
     if (!row) return null;
@@ -534,8 +611,10 @@ class ComplaintRepository {
 
     return {
       id: row.id_display,
+      numeric_id: row.db_id,
       customer: row.customer,
       invoice: row.invoice,
+      product: row.product || '',
       type: row.type,
       subtype: row.subtype || 'General',
       raisedBy: row.raisedBy,
@@ -553,6 +632,88 @@ class ComplaintRepository {
       taken_action_by: row.taken_action_by,
       sales_executive_id: row.sales_executive_id,
       warehouse_id: row.warehouse_id
+    };
+  }
+
+  /**
+   * Checks for duplicate active complaints using the composite rule:
+   * Customer + Invoice + Product + Issue Type (Complaint Type + Subtype)
+   */
+  async findPossibleDuplicate({ customer_code, invoice_number, product_name, complaint_type_id, complaint_subtype_id }) {
+    const pool = getPool();
+    const cleanCustomer = (customer_code || '').trim();
+    const cleanInvoice = (invoice_number || '').trim();
+    const cleanProduct = (product_name || '').trim();
+    const typeId = parseInt(complaint_type_id, 10);
+    const subtypeId = complaint_subtype_id ? parseInt(complaint_subtype_id, 10) : null;
+
+    if (!cleanCustomer || !cleanInvoice || isNaN(typeId)) {
+      return null;
+    }
+
+    const req = pool.request()
+      .input('customer_code', sql.VarChar, cleanCustomer)
+      .input('invoice_number', sql.VarChar, cleanInvoice)
+      .input('complaint_type_id', sql.Int, typeId);
+
+    let productClause = '';
+    if (cleanProduct) {
+      req.input('product_name', sql.NVarChar, cleanProduct);
+      productClause = 'AND LOWER(LTRIM(RTRIM(c.product_name))) = LOWER(LTRIM(RTRIM(@product_name)))';
+    } else {
+      productClause = 'AND (c.product_name IS NULL OR LTRIM(RTRIM(c.product_name)) = \'\')';
+    }
+
+    let subtypeClause = '';
+    if (subtypeId) {
+      req.input('complaint_subtype_id', sql.Int, subtypeId);
+      subtypeClause = 'AND (c.complaint_subtype_id = @complaint_subtype_id OR c.complaint_subtype_id IS NULL)';
+    }
+
+    const query = `
+      SELECT TOP 1
+        c.id,
+        c.complaint_number,
+        c.customer_code,
+        c.invoice_number,
+        c.product_name,
+        c.status,
+        c.raised_at,
+        c.created_at,
+        CONVERT(VARCHAR(30), c.raised_at, 126) AS raised_at_iso,
+        CONVERT(VARCHAR(20), c.raised_at, 106) AS raised_at_formatted,
+        ct.name AS complaint_type,
+        cs.name AS complaint_subtype
+      FROM Complaints c
+      JOIN ComplaintTypes ct ON c.complaint_type_id = ct.id
+      LEFT JOIN ComplaintSubtypes cs ON c.complaint_subtype_id = cs.id
+      WHERE 
+        LOWER(LTRIM(RTRIM(c.customer_code))) = LOWER(LTRIM(RTRIM(@customer_code)))
+        AND LOWER(LTRIM(RTRIM(c.invoice_number))) = LOWER(LTRIM(RTRIM(@invoice_number)))
+        ${productClause}
+        AND c.complaint_type_id = @complaint_type_id
+        ${subtypeClause}
+        AND c.status NOT IN ('Resolved', 'Completed', 'Closed')
+      ORDER BY c.id DESC
+    `;
+
+    const res = await req.query(query);
+    if (res.recordset.length === 0) return null;
+
+    const row = res.recordset[0];
+    const issueType = row.complaint_subtype 
+      ? `${row.complaint_type} — ${row.complaint_subtype}`
+      : row.complaint_type;
+
+    return {
+      id: row.id,
+      complaintId: row.complaint_number,
+      invoiceNumber: row.invoice_number,
+      customerCode: row.customer_code,
+      product: row.product_name || 'N/A',
+      issueType: issueType,
+      status: row.status,
+      createdAt: row.raised_at_formatted || row.raised_at_iso || row.created_at
     };
   }
 
@@ -639,6 +800,12 @@ class ComplaintRepository {
       return null;
     }
   }
+
+  triggerEscalationNotification(complaintId) {
+    triggerEscalationEmail(complaintId);
+  }
 }
 
 module.exports = ComplaintRepository;
+module.exports.triggerEscalationEmail = triggerEscalationEmail;
+

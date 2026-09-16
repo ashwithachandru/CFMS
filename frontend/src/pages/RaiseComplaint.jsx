@@ -4,8 +4,9 @@ import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import CustomSelect from '../components/common/CustomSelect';
 import Button from '../components/common/Button';
+import InvoiceModal from '../components/common/InvoiceModal';
 import { api } from '../services/api';
-import { Eye, X, Image as ImageIcon, FileText } from 'lucide-react';
+import { Eye, X, Image as ImageIcon, FileText, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 const RaiseComplaint = () => {
   const navigate = useNavigate();
@@ -15,10 +16,11 @@ const RaiseComplaint = () => {
   // Mode Selection: 'ocr' (Option A: Via Invoice) vs 'manual' (Option B: Manual Entry)
   const [entryMode, setEntryMode] = useState('ocr');
 
-  // Core Complaint Form State (Option B)
+  // Core Complaint Form State (Option B: Manual)
   const [warehouseId, setWarehouseId] = useState('');
   const [customerCode, setCustomerCode] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [productName, setProductName] = useState('');
   const [complaintTypeId, setComplaintTypeId] = useState('');
   const [complaintSubtypeId, setComplaintSubtypeId] = useState('');
   const [description, setDescription] = useState('');
@@ -36,6 +38,18 @@ const RaiseComplaint = () => {
   const [ocrSuccessNotice, setOcrSuccessNotice] = useState('');
   const [rawOcrText, setRawOcrText] = useState('');
   const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
+
+  // OCR Form Fields (Option A)
+  const [ocrCustomerCode, setOcrCustomerCode] = useState('');
+  const [ocrInvoiceNumber, setOcrInvoiceNumber] = useState('');
+  const [ocrDetectedProducts, setOcrDetectedProducts] = useState([]);
+  const [ocrSelectedProduct, setOcrSelectedProduct] = useState('');
+  const [ocrCustomProduct, setOcrCustomProduct] = useState('');
+  const [ocrComplaintTypeId, setOcrComplaintTypeId] = useState('');
+  const [ocrComplaintSubtypeId, setOcrComplaintSubtypeId] = useState('');
+
+  // Duplicate Warning Modal State
+  const [duplicateData, setDuplicateData] = useState(null);
 
   // App Metadata State
   const [warehouses, setWarehouses] = useState([]);
@@ -85,6 +99,7 @@ const RaiseComplaint = () => {
   };
 
   const filteredSubtypes = complaintTypeId ? (subtypesMap[complaintTypeId] || []) : [];
+  const ocrFilteredSubtypes = ocrComplaintTypeId ? (subtypesMap[ocrComplaintTypeId] || []) : [];
 
   // --- OCR INVOICE UPLOAD HANDLER ---
   const handleInvoiceChange = async (e) => {
@@ -116,10 +131,23 @@ const RaiseComplaint = () => {
         const resData = result.data || {};
         const raw = resData.raw_text || '';
         const tempUrl = resData.temp_invoice_url || '';
+        const fields = resData.fields || {};
+        const detectedProducts = fields.products || resData.products || [];
 
         setRawOcrText(raw);
         setInvoiceUrl(tempUrl);
-        setOcrSuccessNotice('Invoice scanned — review the extracted text below to fill in the details.');
+        setOcrDetectedProducts(detectedProducts);
+        if (detectedProducts.length > 0) {
+          setOcrSelectedProduct(detectedProducts[0].description || detectedProducts[0].name || '');
+        }
+        if (fields.customer_code || resData.customer_code) {
+          setOcrCustomerCode(fields.customer_code || resData.customer_code);
+        }
+        if (fields.invoice_number || resData.invoice_number) {
+          setOcrInvoiceNumber(fields.invoice_number || resData.invoice_number);
+        }
+
+        setOcrSuccessNotice('Invoice scanned — extracted line items and raw text are ready below.');
       } else {
         const errJson = await res.json().catch(() => ({}));
         setOcrError(errJson.message || 'Invoice upload completed but OCR failed. Please check the image quality.');
@@ -140,6 +168,13 @@ const RaiseComplaint = () => {
     setOcrError('');
     setOcrSuccessNotice('');
     setRawOcrText('');
+    setOcrDetectedProducts([]);
+    setOcrSelectedProduct('');
+    setOcrCustomProduct('');
+    setOcrCustomerCode('');
+    setOcrInvoiceNumber('');
+    setOcrComplaintTypeId('');
+    setOcrComplaintSubtypeId('');
     setInvoiceModalOpen(false);
     if (invoiceFileInputRef.current) invoiceFileInputRef.current.value = '';
   };
@@ -183,9 +218,19 @@ const RaiseComplaint = () => {
     setIsSubmitting(true);
 
     try {
+      const finalProduct = ocrSelectedProduct === '__custom__' 
+        ? ocrCustomProduct.trim() 
+        : (ocrSelectedProduct.trim() || ocrCustomProduct.trim());
+
       const formData = new FormData();
       formData.append('submission_type', 'ocr');
       formData.append('entry_mode', 'ocr');
+
+      if (ocrCustomerCode) formData.append('customer_code', ocrCustomerCode);
+      if (ocrInvoiceNumber) formData.append('invoice_number', ocrInvoiceNumber);
+      if (finalProduct) formData.append('product_name', finalProduct);
+      if (ocrComplaintTypeId) formData.append('complaint_type_id', ocrComplaintTypeId);
+      if (ocrComplaintSubtypeId) formData.append('complaint_subtype_id', ocrComplaintSubtypeId);
 
       if (invoiceFile) formData.append('invoice', invoiceFile);
       else if (invoiceUrl) formData.append('invoice_url', invoiceUrl);
@@ -195,6 +240,16 @@ const RaiseComplaint = () => {
 
       const res = await api.postFormData('/complaints', formData);
       const result = await res.json();
+
+      if (result.possibleDuplicate && result.existingComplaint) {
+        setDuplicateData({
+          existingComplaint: result.existingComplaint,
+          submissionType: 'ocr',
+          formData: formData
+        });
+        setIsSubmitting(false);
+        return;
+      }
 
       if (res.ok) {
         setSuccessMsg(result.message || 'Invoice-based complaint raised successfully!');
@@ -218,7 +273,7 @@ const RaiseComplaint = () => {
     setErrorMsg('');
     setSuccessMsg('');
 
-    if (!warehouseId || !customerCode.trim() || !invoiceNumber.trim() || !complaintTypeId || !description.trim()) {
+    if (!warehouseId || !customerCode.trim() || !invoiceNumber.trim() || !productName.trim() || !complaintTypeId || !description.trim()) {
       setErrorMsg('Please fill in all required fields marked with *');
       return;
     }
@@ -235,6 +290,7 @@ const RaiseComplaint = () => {
       formData.append('warehouse_id', warehouseId);
       formData.append('customer_code', customerCode.trim());
       formData.append('invoice_number', invoiceNumber.trim());
+      formData.append('product_name', productName.trim());
       formData.append('complaint_type_id', complaintTypeId);
       if (complaintSubtypeId) formData.append('complaint_subtype_id', complaintSubtypeId);
       formData.append('description', description.trim());
@@ -246,10 +302,21 @@ const RaiseComplaint = () => {
       const res = await api.postFormData('/complaints', formData);
       const result = await res.json();
 
+      if (result.possibleDuplicate && result.existingComplaint) {
+        setDuplicateData({
+          existingComplaint: result.existingComplaint,
+          submissionType: 'manual',
+          formData: formData
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
       if (res.ok) {
         setSuccessMsg(result.message || 'Manual complaint raised successfully!');
         setCustomerCode('');
         setInvoiceNumber('');
+        setProductName('');
         setComplaintTypeId('');
         setComplaintSubtypeId('');
         setDescription('');
@@ -261,6 +328,45 @@ const RaiseComplaint = () => {
     } catch (err) {
       console.error('Submit Manual Complaint Error:', err);
       setErrorMsg('Failed to raise complaint. Please check your network connection.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // --- CONFIRM SUBMIT ANYWAY (BYPASS DUPLICATE WARNING) ---
+  const handleConfirmSubmitAnyway = async () => {
+    if (!duplicateData?.formData) return;
+    setIsSubmitting(true);
+    setErrorMsg('');
+    try {
+      const formData = duplicateData.formData;
+      formData.set('allow_duplicate', 'true');
+      const res = await api.postFormData('/complaints', formData);
+      const result = await res.json();
+      if (res.ok && !result.possibleDuplicate) {
+        setSuccessMsg(result.message || 'Complaint raised successfully!');
+        const isManual = duplicateData.submissionType === 'manual';
+        setDuplicateData(null);
+        if (isManual) {
+          setCustomerCode('');
+          setInvoiceNumber('');
+          setProductName('');
+          setComplaintTypeId('');
+          setComplaintSubtypeId('');
+          setDescription('');
+        } else {
+          removeInvoice();
+        }
+        removePhoto();
+        setTimeout(() => navigate('/dashboard'), 1800);
+      } else {
+        setErrorMsg(result.message || 'Failed to submit complaint.');
+        setDuplicateData(null);
+      }
+    } catch (err) {
+      console.error('Submit anyway error:', err);
+      setErrorMsg('Failed to submit complaint. Please check your network connection.');
+      setDuplicateData(null);
     } finally {
       setIsSubmitting(false);
     }
@@ -278,8 +384,8 @@ const RaiseComplaint = () => {
   const optionCardStyle = (isActive) => ({
     padding: '16px 20px',
     borderRadius: '10px',
-    border: isActive ? '2px solid #2563eb' : '1px solid var(--border-color)',
-    backgroundColor: isActive ? 'rgba(37, 99, 235, 0.04)' : 'var(--bg-secondary)',
+    border: isActive ? '2px solid var(--brand-primary)' : '1px solid var(--border-color)',
+    backgroundColor: isActive ? 'var(--brand-primary-light)' : 'var(--bg-secondary)',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'flex-start',
@@ -377,10 +483,10 @@ const RaiseComplaint = () => {
                   name="entryMode"
                   checked={entryMode === 'ocr'}
                   onChange={() => setEntryMode('ocr')}
-                  style={{ accentColor: '#2563eb', marginTop: '3px', cursor: 'pointer' }}
+                  style={{ accentColor: 'var(--brand-primary)', marginTop: '3px', cursor: 'pointer' }}
                 />
                 <div>
-                  <label htmlFor="radio-ocr" style={{ cursor: 'pointer', display: 'block', fontSize: '15px', fontWeight: '600', color: entryMode === 'ocr' ? '#2563eb' : 'var(--text-primary)' }}>
+                  <label htmlFor="radio-ocr" style={{ cursor: 'pointer', display: 'block', fontSize: '15px', fontWeight: '600', color: entryMode === 'ocr' ? 'var(--brand-primary)' : 'var(--text-primary)' }}>
                     Option A: Via Invoice (OCR)
                   </label>
                   <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
@@ -397,10 +503,10 @@ const RaiseComplaint = () => {
                   name="entryMode"
                   checked={entryMode === 'manual'}
                   onChange={() => setEntryMode('manual')}
-                  style={{ accentColor: '#2563eb', marginTop: '3px', cursor: 'pointer' }}
+                  style={{ accentColor: 'var(--brand-primary)', marginTop: '3px', cursor: 'pointer' }}
                 />
                 <div>
-                  <label htmlFor="radio-manual" style={{ cursor: 'pointer', display: 'block', fontSize: '15px', fontWeight: '600', color: entryMode === 'manual' ? '#2563eb' : 'var(--text-primary)' }}>
+                  <label htmlFor="radio-manual" style={{ cursor: 'pointer', display: 'block', fontSize: '15px', fontWeight: '600', color: entryMode === 'manual' ? 'var(--brand-primary)' : 'var(--text-primary)' }}>
                     Option B: Manual Entry
                   </label>
                   <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
@@ -444,7 +550,7 @@ const RaiseComplaint = () => {
                       accept=".jpg,.jpeg,.png,.webp,.pdf"
                       style={{ display: 'none' }}
                     />
-                    <FileText size={32} style={{ margin: '0 auto 8px auto', color: '#2563eb' }} />
+                    <FileText size={32} style={{ margin: '0 auto 8px auto', color: 'var(--brand-primary)' }} />
                     <p style={{ margin: '0 0 6px 0', fontSize: '14px', fontWeight: '600' }}>
                       Choose Invoice File
                     </p>
@@ -483,8 +589,8 @@ const RaiseComplaint = () => {
                           </div>
                         ) : (
                           <div style={{
-                            width: '48px', height: '48px', borderRadius: '6px', backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb', flexShrink: 0
+                            width: '48px', height: '48px', borderRadius: '6px', backgroundColor: 'var(--brand-primary-light)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--brand-primary)', flexShrink: 0
                           }}>
                             <FileText size={24} />
                           </div>
@@ -500,7 +606,7 @@ const RaiseComplaint = () => {
                               type="button"
                               onClick={() => setInvoiceModalOpen(true)}
                               style={{
-                                background: 'none', border: 'none', color: '#2563eb', padding: 0,
+                                background: 'none', border: 'none', color: 'var(--brand-primary)', padding: 0,
                                 fontSize: '12px', fontWeight: '600', cursor: 'pointer', marginTop: '4px',
                                 display: 'inline-flex', alignItems: 'center', gap: '4px'
                               }}
@@ -523,8 +629,8 @@ const RaiseComplaint = () => {
                     {isOcrScanning && (
                       <div style={{
                         padding: '14px 16px', borderRadius: '8px',
-                        backgroundColor: 'rgba(37, 99, 235, 0.06)', border: '1px solid rgba(37, 99, 235, 0.2)',
-                        color: '#2563eb', fontSize: '14px', fontWeight: '500'
+                        backgroundColor: 'var(--brand-primary-light)', border: '1px solid var(--border-color)',
+                        color: 'var(--brand-primary)', fontSize: '14px', fontWeight: '500'
                       }}>
                         Scanning invoice with offline Tesseract OCR... Extracting text lines...
                       </div>
@@ -581,6 +687,84 @@ const RaiseComplaint = () => {
                   </div>
                 </div>
               )}
+
+              {/* PRODUCT & COMPLAINT DETAILS FOR OPTION A */}
+              <div style={cardStyle}>
+                <h3 style={{ fontSize: '16px', fontWeight: '600', margin: '0 0 4px 0' }}>
+                  Product & Complaint Issue Details
+                </h3>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 16px 0' }}>
+                  Select the affected product line item from the invoice and specify the issue type.
+                </p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                  <div>
+                    <label style={labelStyle}>Product / Line Item</label>
+                    {ocrDetectedProducts && ocrDetectedProducts.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <select
+                          value={ocrSelectedProduct}
+                          onChange={(e) => setOcrSelectedProduct(e.target.value)}
+                          style={inputStyle}
+                        >
+                          <option value="">-- Select Scanned Item or Enter Below --</option>
+                          {ocrDetectedProducts.map((p, idx) => {
+                            const desc = p.description || p.name || `Item ${idx + 1}`;
+                            return (
+                              <option key={idx} value={desc}>
+                                {desc} {p.quantity ? `(Qty: ${p.quantity})` : ''}
+                              </option>
+                            );
+                          })}
+                          <option value="__custom__">Other / Custom Item...</option>
+                        </select>
+                        {(!ocrSelectedProduct || ocrSelectedProduct === '__custom__') && (
+                          <input
+                            type="text"
+                            value={ocrCustomProduct}
+                            onChange={(e) => setOcrCustomProduct(e.target.value)}
+                            placeholder="Enter custom product name (e.g. Dhothi, Towel)"
+                            style={inputStyle}
+                          />
+                        )}
+                      </div>
+                    ) : (
+                      <input
+                        type="text"
+                        value={ocrCustomProduct}
+                        onChange={(e) => setOcrCustomProduct(e.target.value)}
+                        placeholder="e.g. Dhothi, Towel, Cotton Shirt"
+                        style={inputStyle}
+                      />
+                    )}
+                  </div>
+
+                  <div>
+                    <label style={labelStyle}>Complaint / Issue Type</label>
+                    <CustomSelect
+                      options={complaintTypes.map(t => ({ value: String(t.id), label: t.name }))}
+                      value={ocrComplaintTypeId}
+                      onChange={(val) => {
+                        setOcrComplaintTypeId(val);
+                        setOcrComplaintSubtypeId('');
+                      }}
+                      placeholder="Select Complaint Type"
+                    />
+                  </div>
+                </div>
+
+                {ocrFilteredSubtypes.length > 0 && (
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={labelStyle}>Complaint Subtype</label>
+                    <CustomSelect
+                      options={ocrFilteredSubtypes.map(st => ({ value: String(st.id), label: st.name }))}
+                      value={ocrComplaintSubtypeId}
+                      onChange={(val) => setOcrComplaintSubtypeId(val)}
+                      placeholder="Select Complaint Subtype"
+                    />
+                  </div>
+                )}
+              </div>
 
               {/* SEPARATE DEFECT / DAMAGE PHOTO UPLOAD FIELD (OPTION A) */}
               <div style={cardStyle}>
@@ -693,7 +877,19 @@ const RaiseComplaint = () => {
                     type="text"
                     value={invoiceNumber}
                     onChange={(e) => setInvoiceNumber(e.target.value)}
-                    placeholder="e.g. I-73788/RHL2425"
+                    placeholder="e.g. INV-1001"
+                    required
+                    style={inputStyle}
+                  />
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Product / Item Name *</label>
+                  <input
+                    type="text"
+                    value={productName}
+                    onChange={(e) => setProductName(e.target.value)}
+                    placeholder="e.g. Dhothi, Towel, Shirt"
                     required
                     style={inputStyle}
                   />
@@ -711,19 +907,17 @@ const RaiseComplaint = () => {
                     placeholder="Select Complaint Type"
                   />
                 </div>
-              </div>
 
-              {filteredSubtypes.length > 0 && (
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={labelStyle}>Complaint Subtype *</label>
+                <div>
+                  <label style={labelStyle}>Complaint Subtype {filteredSubtypes.length > 0 ? '*' : ''}</label>
                   <CustomSelect
                     options={filteredSubtypes.map(st => ({ value: String(st.id), label: st.name }))}
                     value={complaintSubtypeId}
                     onChange={(val) => setComplaintSubtypeId(val)}
-                    placeholder="Select Complaint Subtype"
+                    placeholder={filteredSubtypes.length > 0 ? "Select Complaint Subtype" : "No subcategory"}
                   />
                 </div>
-              )}
+              </div>
 
               <div style={{ marginBottom: '16px' }}>
                 <label style={labelStyle}>Detailed Description *</label>
@@ -785,8 +979,8 @@ const RaiseComplaint = () => {
                         />
                       ) : (
                         <div style={{
-                          width: '48px', height: '48px', borderRadius: '6px', backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb'
+                          width: '48px', height: '48px', borderRadius: '6px', backgroundColor: 'var(--brand-primary-light)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--brand-primary)'
                         }}>
                           <ImageIcon size={24} />
                         </div>
@@ -822,78 +1016,164 @@ const RaiseComplaint = () => {
       </div>
 
       {/* ========================================================================= */}
-      {/* INVOICE POPUP MODAL (ENLARGED FULL IMAGE VIEW WITHOUT LEAVING PAGE)        */}
+      {/* DUPLICATE COMPLAINT WARNING MODAL                                         */}
       {/* ========================================================================= */}
-      {invoiceModalOpen && (
+      {duplicateData && (
         <div style={{
-          position: 'fixed', inset: 0, zIndex: 1000,
-          backgroundColor: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
+          position: 'fixed',
+          inset: 0,
+          zIndex: 100000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(6px)',
+          padding: '16px'
         }}>
           <div style={{
-            backgroundColor: 'var(--bg-primary)', borderRadius: '14px',
-            maxWidth: '900px', width: '100%', maxHeight: '90vh',
-            display: 'flex', flexDirection: 'column', overflow: 'hidden',
-            border: '1px solid var(--border-color)', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)'
+            backgroundColor: 'var(--bg-primary)',
+            borderRadius: '14px',
+            border: '1px solid var(--border-color)',
+            maxWidth: '520px',
+            width: '100%',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)',
+            overflow: 'hidden'
           }}>
-            {/* Modal Header */}
             <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '16px 20px', borderBottom: '1px solid var(--border-color)',
-              backgroundColor: 'var(--bg-secondary)'
+              padding: '18px 22px',
+              borderBottom: '1px solid var(--border-color)',
+              backgroundColor: 'rgba(239, 68, 68, 0.08)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <FileText size={20} style={{ color: '#2563eb' }} />
-                <span style={{ fontSize: '16px', fontWeight: '700' }}>
-                  Uploaded Invoice — Full View
-                </span>
-                {invoiceFile && (
-                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginLeft: '8px' }}>
-                    ({invoiceFile.name})
+              <AlertTriangle size={24} style={{ color: '#EF4444', flexShrink: 0 }} />
+              <div>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#EF4444' }}>
+                  Possible Duplicate Complaint Detected
+                </h3>
+                <p style={{ margin: '2px 0 0 0', fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+                  A similar complaint already exists for this invoice and product.
+                </p>
+              </div>
+            </div>
+
+            <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{
+                backgroundColor: 'var(--bg-secondary)',
+                padding: '14px 16px',
+                borderRadius: '10px',
+                border: '1px solid var(--border-color)',
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '12px',
+                fontSize: '13px'
+              }}>
+                <div>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '10.5px', textTransform: 'uppercase', fontWeight: '700', letterSpacing: '0.04em' }}>
+                    Existing Complaint
                   </span>
+                  <div style={{ fontWeight: '700', color: 'var(--brand-primary)', fontSize: '14px', marginTop: '2px' }}>
+                    {duplicateData.existingComplaint?.complaintId}
+                  </div>
+                </div>
+
+                <div>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '10.5px', textTransform: 'uppercase', fontWeight: '700', letterSpacing: '0.04em' }}>
+                    Status
+                  </span>
+                  <div style={{ fontWeight: '600', color: 'var(--text-primary)', marginTop: '2px' }}>
+                    {duplicateData.existingComplaint?.status}
+                  </div>
+                </div>
+
+                <div>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '10.5px', textTransform: 'uppercase', fontWeight: '700', letterSpacing: '0.04em' }}>
+                    Invoice
+                  </span>
+                  <div style={{ fontWeight: '600', color: 'var(--text-primary)', marginTop: '2px' }}>
+                    {duplicateData.existingComplaint?.invoiceNumber}
+                  </div>
+                </div>
+
+                <div>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '10.5px', textTransform: 'uppercase', fontWeight: '700', letterSpacing: '0.04em' }}>
+                    Product
+                  </span>
+                  <div style={{ fontWeight: '600', color: 'var(--text-primary)', marginTop: '2px' }}>
+                    {duplicateData.existingComplaint?.product || 'N/A'}
+                  </div>
+                </div>
+
+                <div style={{ gridColumn: 'span 2' }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '10.5px', textTransform: 'uppercase', fontWeight: '700', letterSpacing: '0.04em' }}>
+                    Issue Type
+                  </span>
+                  <div style={{ fontWeight: '600', color: 'var(--text-primary)', marginTop: '2px' }}>
+                    {duplicateData.existingComplaint?.issueType}
+                  </div>
+                </div>
+
+                {duplicateData.existingComplaint?.createdAt && (
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '10.5px', textTransform: 'uppercase', fontWeight: '700', letterSpacing: '0.04em' }}>
+                      Created Date
+                    </span>
+                    <div style={{ fontWeight: '500', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      {duplicateData.existingComplaint?.createdAt}
+                    </div>
+                  </div>
                 )}
               </div>
-              <button
-                onClick={() => setInvoiceModalOpen(false)}
-                style={{
-                  background: 'none', border: 'none', color: 'var(--text-secondary)',
-                  cursor: 'pointer', padding: '6px', borderRadius: '6px', display: 'flex', alignItems: 'center'
+
+              <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                You can review the existing active complaint or proceed to submit this complaint anyway.
+              </p>
+            </div>
+
+            <div style={{
+              padding: '16px 22px',
+              borderTop: '1px solid var(--border-color)',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '12px',
+              backgroundColor: 'var(--bg-secondary)'
+            }}>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  const comp = duplicateData.existingComplaint;
+                  setDuplicateData(null);
+                  navigate('/dashboard', { state: { selectedComplaintId: comp?.id, highlightComplaintNumber: comp?.complaintId } });
                 }}
               >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Modal Content */}
-            <div style={{
-              padding: '20px', overflowY: 'auto', display: 'flex',
-              alignItems: 'center', justifyContent: 'center', backgroundColor: '#0f172a'
-            }}>
-              {invoiceFilePreview ? (
-                <img
-                  src={invoiceFilePreview}
-                  alt="Full Invoice Preview"
-                  style={{ maxWidth: '100%', maxHeight: '75vh', borderRadius: '8px', objectFit: 'contain' }}
-                />
-              ) : (
-                <div style={{ color: '#94a3b8', padding: '40px', textAlign: 'center' }}>
-                  Document preview unavailable for PDF format. (File uploaded successfully)
-                </div>
-              )}
-            </div>
-
-            {/* Modal Footer */}
-            <div style={{
-              padding: '12px 20px', borderTop: '1px solid var(--border-color)',
-              display: 'flex', justifyContent: 'flex-end', backgroundColor: 'var(--bg-secondary)'
-            }}>
-              <Button type="button" variant="secondary" onClick={() => setInvoiceModalOpen(false)}>
-                Close Preview
+                View Existing Complaint
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                onClick={handleConfirmSubmitAnyway}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? 'Submitting...' : 'Submit Anyway'}
               </Button>
             </div>
           </div>
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* INVOICE POPUP MODAL (ENLARGED FULL IMAGE VIEW WITHOUT LEAVING PAGE)        */}
+      {/* ========================================================================= */}
+      <InvoiceModal
+        isOpen={invoiceModalOpen}
+        onClose={() => setInvoiceModalOpen(false)}
+        imageUrl={invoiceFilePreview || invoiceUrl}
+        ocrText={rawOcrText || ''}
+        title={`Uploaded Invoice — ${invoiceFile?.name || 'Full View'}`}
+        fileName={invoiceFile?.name || ''}
+      />
     </div>
   );
 };

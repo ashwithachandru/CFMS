@@ -22,10 +22,10 @@ const Button = ({
       background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%)',
       color: '#FFFFFF',
       border: 'none',
-      boxShadow: '0 4px 12px rgba(30, 79, 217, 0.2)'
+      boxShadow: '0 4px 12px rgba(27, 67, 50, 0.25)'
     },
     takeAction: {
-      background: '#2E6DA4',
+      background: 'var(--brand-primary)',
       color: '#FFFFFF',
       border: 'none',
       boxShadow: 'none'

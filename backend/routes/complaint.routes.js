@@ -83,9 +83,21 @@ router.get('/', authMiddleware, requirePermission('complaints', 'read'), async (
 // GET /api/complaints/:id
 router.get('/:id', authMiddleware, requirePermission('complaints', 'read'), async (req, res, next) => {
   try {
-    console.log("BACKEND GET SINGLE COMPLAINT ID:", req.params.id);
-    const complaint = await complaintRepo.findById(req.params.id);
-    console.log("BACKEND GET SINGLE COMPLAINT FOUND:", complaint ? complaint.id : null);
+    const userRole = req.user.role;
+    const userId = req.user.userId;
+    let warehouseId = req.user.warehouseId;
+
+    if (!warehouseId && userId) {
+      const pool = getPool();
+      const uRes = await pool.request()
+        .input('uid', userId)
+        .query("SELECT warehouse_id FROM Users WHERE id = @uid");
+      if (uRes.recordset.length > 0) {
+        warehouseId = uRes.recordset[0].warehouse_id;
+      }
+    }
+
+    const complaint = await complaintRepo.findById(req.params.id, userRole, userId, warehouseId);
     if (!complaint) {
       return res.status(404).json({
         success: false,
@@ -106,11 +118,79 @@ const Tesseract = require('tesseract.js');
 const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
+const child_process = require('child_process');
+
+// Asynchronous non-blocking child process runner for Python OCR
+function runPythonOcrAsync(cmd, ocrScriptPath, filePath, timeoutMs = 45000) {
+  return new Promise((resolve) => {
+    let isFinished = false;
+    let stdoutData = '';
+    let stderrData = '';
+
+    let child;
+    try {
+      child = child_process.spawn(cmd, [ocrScriptPath, filePath], {
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+    } catch (spawnErr) {
+      console.warn(`[OCR] Spawn exception with ${cmd}:`, spawnErr.message);
+      return resolve(null);
+    }
+
+    const timer = setTimeout(() => {
+      if (!isFinished) {
+        isFinished = true;
+        try { child.kill('SIGKILL'); } catch (e) {}
+        console.warn(`[OCR] Execution timed out with ${cmd} after ${timeoutMs}ms.`);
+        resolve(null);
+      }
+    }, timeoutMs);
+
+    child.stdout.on('data', (chunk) => {
+      stdoutData += chunk.toString('utf-8');
+    });
+
+    child.stderr.on('data', (chunk) => {
+      stderrData += chunk.toString('utf-8');
+    });
+
+    child.on('error', (err) => {
+      if (!isFinished) {
+        isFinished = true;
+        clearTimeout(timer);
+        console.warn(`[OCR] ${cmd} process error:`, err.message);
+        resolve(null);
+      }
+    });
+
+    child.on('close', (code) => {
+      if (!isFinished) {
+        isFinished = true;
+        clearTimeout(timer);
+        const trimmed = stdoutData.trim();
+        if (code === 0 && trimmed.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            return resolve(parsed);
+          } catch (jsonErr) {
+            console.warn('[OCR] Failed to parse JSON stdout:', jsonErr.message);
+            return resolve(null);
+          }
+        }
+        if (code !== 0) {
+          console.warn(`[OCR] ${cmd} exited with code ${code}. Stderr snippet:`, stderrData.slice(0, 200));
+        }
+        resolve(null);
+      }
+    });
+  });
+}
 
 // Helper to preprocess low-resolution/low-contrast invoice images via offscreen Chrome canvas
 async function preprocessImageForOCR(filePath) {
   try {
-    const stats = fs.statSync(filePath);
+    const stats = await fs.promises.stat(filePath);
     // If file is small (< 500KB), apply upscaling & adaptive binarization
     if (stats.size < 500 * 1024) {
       console.log(`[OCR PREPROCESS] Low-res upload detected (${(stats.size / 1024).toFixed(1)} KB). Running canvas upscaling & binarization...`);
@@ -150,8 +230,8 @@ async function preprocessImageForOCR(filePath) {
       await browser.close();
 
       if (base64Png) {
-        const processedPath = filePath + '_proc.png';
-        fs.writeFileSync(processedPath, base64Png.replace(/^data:image\/png;base64,/, ''), 'base64');
+        const processedPath = filePath + '_' + Date.now() + '_proc.png';
+        await fs.promises.writeFile(processedPath, base64Png.replace(/^data:image\/png;base64,/, ''), 'base64');
         console.log(`[OCR PREPROCESS] Saved preprocessed image to: ${processedPath}`);
         return processedPath;
       }
@@ -264,7 +344,7 @@ function parseInvoiceText(text) {
 }
 
 // POST /api/complaints/ocr-invoice
-// Processes an uploaded invoice photo with offline RapidOCR full document extractor
+// Processes an uploaded invoice photo with offline RapidOCR full document extractor asynchronously
 router.post('/ocr-invoice', authMiddleware, requirePermission('complaints', 'write'), (req, res, next) => {
   upload.single('invoice')(req, res, async (err) => {
     if (err) {
@@ -281,32 +361,18 @@ router.post('/ocr-invoice', authMiddleware, requirePermission('complaints', 'wri
       });
     }
 
-    const path = require('path');
-    const child_process = require('child_process');
-    const fs = require('fs');
-
     const filePath = path.resolve(req.file.path);
     const ocrScriptPath = path.resolve(__dirname, '../services/ocr_service.py');
 
-    console.log(`[OCR] Executing full invoice OCR on: ${filePath}`);
+    console.log(`[OCR] Executing asynchronous invoice OCR on: ${filePath}`);
 
     let ocrOutput = null;
 
-    // Try py first, then python
+    // Try py first, then python asynchronously without blocking event loop
     for (const cmd of ['py', 'python']) {
-      try {
-        const proc = child_process.spawnSync(cmd, [ocrScriptPath, filePath], {
-          encoding: 'utf-8',
-          timeout: 45000,
-          windowsHide: true,
-          maxBuffer: 10 * 1024 * 1024
-        });
-        if (proc.stdout && proc.stdout.trim().startsWith('{')) {
-          ocrOutput = JSON.parse(proc.stdout.trim());
-          break;
-        }
-      } catch (e) {
-        console.warn(`[OCR] ${cmd} execution attempt failed:`, e.message);
+      ocrOutput = await runPythonOcrAsync(cmd, ocrScriptPath, filePath);
+      if (ocrOutput && ocrOutput.success) {
+        break;
       }
     }
 
@@ -323,8 +389,8 @@ router.post('/ocr-invoice', authMiddleware, requirePermission('complaints', 'wri
       const rawText = ocrResult?.data?.text || '';
       const parsed = parseInvoiceText(rawText);
 
-      if (processedFilePath !== filePath && fs.existsSync(processedFilePath)) {
-        try { fs.unlinkSync(processedFilePath); } catch (e) {}
+      if (processedFilePath !== filePath) {
+        await fs.promises.unlink(processedFilePath).catch(() => {});
       }
 
       return res.status(200).json({
@@ -370,6 +436,37 @@ router.post('/ocr-invoice', authMiddleware, requirePermission('complaints', 'wri
   });
 });
 
+// POST /api/complaints/check-duplicate
+// Pre-submission duplicate check based on Customer + Invoice + Product + Issue Type
+router.post('/check-duplicate', authMiddleware, requirePermission('complaints', 'read'), async (req, res, next) => {
+  try {
+    const { customer_code, invoice_number, product_name, complaint_type_id, complaint_subtype_id } = req.body;
+    const duplicate = await complaintRepo.findPossibleDuplicate({
+      customer_code,
+      invoice_number,
+      product_name,
+      complaint_type_id,
+      complaint_subtype_id
+    });
+
+    if (duplicate) {
+      return res.status(200).json({
+        success: true,
+        possibleDuplicate: true,
+        message: 'A similar complaint already exists for this invoice and product.',
+        existingComplaint: duplicate
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      possibleDuplicate: false
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /api/complaints
 // Creates a new complaint (Restricted to Sales Executive only)
 router.post('/', authMiddleware, requirePermission('complaints', 'write'), (req, res, next) => {
@@ -394,7 +491,19 @@ router.post('/', authMiddleware, requirePermission('complaints', 'write'), (req,
     }
 
     try {
-      const { warehouse_id, customer_code, invoice_number, complaint_type_id, complaint_subtype_id, description, submission_type, ocr_text } = req.body;
+      const { 
+        warehouse_id, 
+        customer_code, 
+        invoice_number, 
+        product_name,
+        complaint_type_id, 
+        complaint_subtype_id, 
+        description, 
+        submission_type, 
+        ocr_text,
+        allow_duplicate,
+        bypass_duplicate_check
+      } = req.body;
 
       const isOcr = submission_type === 'ocr' || req.body.entry_mode === 'ocr';
 
@@ -402,6 +511,7 @@ router.post('/', authMiddleware, requirePermission('complaints', 'write'), (req,
       const finalWarehouseId = isOcr ? (warehouse_id ? parseInt(warehouse_id, 10) : null) : parseInt(warehouse_id, 10);
       const finalCustomerCode = customer_code || (isOcr ? 'SCANNED-INV' : '');
       const finalInvoiceNumber = invoice_number || (isOcr ? `INV-OCR-${Date.now().toString().slice(-6)}` : '');
+      const finalProductName = product_name ? product_name.trim() : null;
       const finalComplaintTypeId = complaint_type_id ? parseInt(complaint_type_id, 10) : 1;
       const finalDescription = description || (isOcr ? 'Invoice Scanned Complaint (OCR Submission)' : '');
 
@@ -410,6 +520,28 @@ router.post('/', authMiddleware, requirePermission('complaints', 'write'), (req,
           return res.status(400).json({
             success: false,
             message: 'Warehouse, Customer Code, Invoice Number, Complaint Type, and Description are required.'
+          });
+        }
+      }
+
+      // Backend safety check: Duplicate detection based on Customer + Invoice + Product + Issue Type
+      const shouldBypassDuplicate = allow_duplicate === true || allow_duplicate === 'true' || bypass_duplicate_check === true || bypass_duplicate_check === 'true';
+
+      if (!shouldBypassDuplicate && finalCustomerCode && finalInvoiceNumber) {
+        const existingDup = await complaintRepo.findPossibleDuplicate({
+          customer_code: finalCustomerCode,
+          invoice_number: finalInvoiceNumber,
+          product_name: finalProductName,
+          complaint_type_id: finalComplaintTypeId,
+          complaint_subtype_id: complaint_subtype_id ? parseInt(complaint_subtype_id, 10) : null
+        });
+
+        if (existingDup) {
+          return res.status(200).json({
+            success: false,
+            possibleDuplicate: true,
+            message: 'A similar complaint already exists for this invoice and product.',
+            existingComplaint: existingDup
           });
         }
       }
@@ -434,6 +566,7 @@ router.post('/', authMiddleware, requirePermission('complaints', 'write'), (req,
         warehouse_id: finalWarehouseId,
         customer_code: finalCustomerCode,
         invoice_number: finalInvoiceNumber,
+        product_name: finalProductName,
         complaint_type_id: finalComplaintTypeId,
         complaint_subtype_id: complaint_subtype_id ? parseInt(complaint_subtype_id, 10) : null,
         description: finalDescription,
@@ -464,6 +597,17 @@ router.put('/:id/status', authMiddleware, requirePermission('complaints', 'write
     const { status, action } = req.body;
     const userId = req.user.userId;
     const userRole = req.user.role;
+    let warehouseId = req.user.warehouseId;
+
+    if (!warehouseId && userId) {
+      const pool = getPool();
+      const uRes = await pool.request()
+        .input('uid', userId)
+        .query("SELECT warehouse_id FROM Users WHERE id = @uid");
+      if (uRes.recordset.length > 0) {
+        warehouseId = uRes.recordset[0].warehouse_id;
+      }
+    }
 
     if (userRole === 'Sales Executive') {
       return res.status(403).json({
@@ -472,13 +616,25 @@ router.put('/:id/status', authMiddleware, requirePermission('complaints', 'write
       });
     }
 
-    const updated = await complaintRepo.updateStatus(complaintId, status || action, userId, userRole);
+    const updated = await complaintRepo.updateStatus(complaintId, status || action, userId, userRole, warehouseId);
     res.status(200).json({
       success: true,
       message: `Complaint ${complaintId} status updated successfully`,
       data: updated
     });
   } catch (err) {
+    if (err.statusCode === 403 || (err.message && err.message.includes('Access Denied'))) {
+      return res.status(403).json({
+        success: false,
+        message: err.message
+      });
+    }
+    if (err.statusCode === 404 || (err.message && err.message.includes('not found'))) {
+      return res.status(404).json({
+        success: false,
+        message: err.message
+      });
+    }
     next(err);
   }
 });

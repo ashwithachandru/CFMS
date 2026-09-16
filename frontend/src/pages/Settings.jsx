@@ -573,8 +573,8 @@ const Settings = ({ initialTab = 'users' }) => {
                       <td style={{ padding: '12px 10px', fontWeight: '500' }}>
                         <span style={{
                           padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '600',
-                          backgroundColor: u.role === 'Administrator' ? 'rgba(79, 124, 255, 0.15)' : u.role === 'Warehouse Manager' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                          color: u.role === 'Administrator' ? '#3B5FE0' : u.role === 'Warehouse Manager' ? '#D97706' : '#10B981'
+                          backgroundColor: u.role === 'Administrator' ? 'rgba(139, 92, 246, 0.15)' : u.role === 'Warehouse Manager' ? 'rgba(245, 158, 11, 0.15)' : 'var(--brand-primary-light, rgba(27, 67, 50, 0.15))',
+                          color: u.role === 'Administrator' ? '#8B5CF6' : u.role === 'Warehouse Manager' ? '#D97706' : 'var(--brand-primary)'
                         }}>
                           {u.role}
                         </span>
