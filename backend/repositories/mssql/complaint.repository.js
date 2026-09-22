@@ -1,82 +1,80 @@
 const { getPool, sql } = require('../../config/db');
 const mailer = require('../../config/mailer');
 
-function triggerEscalationEmail(complaintId) {
-  setImmediate(async () => {
-    try {
-      const pool = getPool();
+async function triggerEscalationEmail(complaintId) {
+  try {
+    const pool = getPool();
 
-      // Persistent atomic guard: try setting escalation_email_sent_at only if it is currently NULL
-      const updateRes = await pool.request()
-        .input('id', sql.Int, parseInt(complaintId, 10))
-        .query(`
-          UPDATE Complaints 
-          SET escalation_email_sent_at = GETDATE()
-          WHERE id = @id AND escalation_email_sent_at IS NULL
-        `);
+    // Persistent atomic guard: try setting escalation_email_sent_at only if it is currently NULL
+    const updateRes = await pool.request()
+      .input('id', sql.Int, parseInt(complaintId, 10))
+      .query(`
+        UPDATE Complaints 
+        SET escalation_email_sent_at = GETDATE()
+        WHERE id = @id AND escalation_email_sent_at IS NULL
+      `);
 
-      // If rowsAffected is 0, this notification was already sent or won by another concurrent thread
-      if (updateRes.rowsAffected && updateRes.rowsAffected[0] === 0) {
-        console.log(`[MAIL IDEMPOTENT] Escalation email already dispatched for complaint ID ${complaintId}. Skipping duplicate.`);
-        return;
-      }
-
-      const repo = new ComplaintRepository();
-      const details = await repo.getNotificationDetails(complaintId);
-      const recipients = details?.managerEmails?.length > 0 ? details.managerEmails : (details?.managerEmail ? [details.managerEmail] : []);
-      if (details && recipients.length > 0) {
-        try {
-          await mailer.sendEscalationEmail({
-            email: recipients,
-            managerName: details.managerName,
-            complaintNumber: details.complaintNumber,
-            salesExecutiveName: details.salesExecutiveName,
-            customerCode: details.customerCode,
-            invoiceNumber: details.invoiceNumber,
-            complaintType: details.complaintType,
-            complaintSubtype: details.complaintSubtype
-          });
-          console.log(`[MAIL SUCCESS] Escalation email sent for complaint ${details.complaintNumber} (ID: ${complaintId}) to: ${recipients.join(', ')}`);
-        } catch (mailErr) {
-          // On mail delivery failure, reset escalation_email_sent_at to NULL so it can be retried safely
-          console.error(`[MAIL ERROR] Failed sending escalation email for complaint ID ${complaintId}:`, mailErr.message);
-          await pool.request()
-            .input('id', sql.Int, parseInt(complaintId, 10))
-            .query(`UPDATE Complaints SET escalation_email_sent_at = NULL WHERE id = @id`);
-        }
-      } else {
-        console.warn(`[MAIL WARN] Escalation email skipped for complaint ID ${complaintId}: No active Warehouse Manager found for warehouse ID ${details?.warehouseId || 'unknown'}.`);
-      }
-    } catch (err) {
-      console.error(`[MAIL ERROR] Escalation notification handler error for complaint ID ${complaintId}:`, err.message);
+    // If rowsAffected is 0, this notification was already sent or won by another concurrent thread
+    if (updateRes.rowsAffected && updateRes.rowsAffected[0] === 0) {
+      console.log(`[MAIL IDEMPOTENT] Escalation email already dispatched for complaint ID ${complaintId}. Skipping duplicate.`);
+      return;
     }
-  });
-}
 
-function triggerResolutionEmail(complaintId) {
-  setImmediate(async () => {
-    try {
-      const repo = new ComplaintRepository();
-      const details = await repo.getNotificationDetails(complaintId);
-      if (details && details.salesExecutiveEmail) {
-        console.log(`[RESOLUTION MAIL] Complaint ${details.complaintNumber} (ID: ${complaintId}) resolved. Original Sales Executive ID: ${details.salesExecutiveId} (${details.salesExecutiveName}). Sending resolution email to: ${details.salesExecutiveEmail}`);
-        await mailer.sendResolutionEmail({
-          email: details.salesExecutiveEmail,
-          salesExecutiveName: details.salesExecutiveName,
+    const repo = new ComplaintRepository();
+    const details = await repo.getNotificationDetails(complaintId);
+    const recipients = details?.managerEmails?.length > 0 ? details.managerEmails : (details?.managerEmail ? [details.managerEmail] : []);
+    if (details && recipients.length > 0) {
+      try {
+        await mailer.sendEscalationEmail({
+          email: recipients,
+          managerName: details.managerName,
           complaintNumber: details.complaintNumber,
+          salesExecutiveName: details.salesExecutiveName,
           customerCode: details.customerCode,
           invoiceNumber: details.invoiceNumber,
-          warehouseName: details.warehouseName,
           complaintType: details.complaintType,
           complaintSubtype: details.complaintSubtype
         });
-      } else {
-        console.warn(`[MAIL WARN] Resolution email skipped for complaint ID ${complaintId}: Sales Executive email not found for sales_executive_id ${details?.salesExecutiveId || 'unknown'}.`);
+        console.log(`[MAIL SUCCESS] Escalation email sent for complaint ${details.complaintNumber} (ID: ${complaintId}) to: ${recipients.join(', ')}`);
+      } catch (mailErr) {
+        // On mail delivery failure, reset escalation_email_sent_at to NULL so it can be retried safely
+        console.error(`[MAIL ERROR] Failed sending escalation email for complaint ID ${complaintId}:`, mailErr.message);
+        await pool.request()
+          .input('id', sql.Int, parseInt(complaintId, 10))
+          .query(`UPDATE Complaints SET escalation_email_sent_at = NULL WHERE id = @id`);
+        throw mailErr;
       }
-    } catch (err) {
-      console.error(`[MAIL ERROR] Failed sending resolution email for complaint ID ${complaintId}:`, err.message);
+    } else {
+      console.warn(`[MAIL WARN] Escalation email skipped for complaint ID ${complaintId}: No active Warehouse Manager found for warehouse ID ${details?.warehouseId || 'unknown'}.`);
     }
-  });
+  } catch (err) {
+    console.error(`[MAIL ERROR] Escalation notification handler error for complaint ID ${complaintId}:`, err.message);
+    throw err;
+  }
+}
+
+async function triggerResolutionEmail(complaintId) {
+  try {
+    const repo = new ComplaintRepository();
+    const details = await repo.getNotificationDetails(complaintId);
+    if (details && details.salesExecutiveEmail) {
+      console.log(`[RESOLUTION MAIL] Complaint ${details.complaintNumber} (ID: ${complaintId}) resolved. Original Sales Executive ID: ${details.salesExecutiveId} (${details.salesExecutiveName}). Sending resolution email to: ${details.salesExecutiveEmail}`);
+      await mailer.sendResolutionEmail({
+        email: details.salesExecutiveEmail,
+        salesExecutiveName: details.salesExecutiveName,
+        complaintNumber: details.complaintNumber,
+        customerCode: details.customerCode,
+        invoiceNumber: details.invoiceNumber,
+        warehouseName: details.warehouseName,
+        complaintType: details.complaintType,
+        complaintSubtype: details.complaintSubtype
+      });
+    } else {
+      console.warn(`[MAIL WARN] Resolution email skipped for complaint ID ${complaintId}: Sales Executive email not found for sales_executive_id ${details?.salesExecutiveId || 'unknown'}.`);
+    }
+  } catch (err) {
+    console.error(`[MAIL ERROR] Failed sending resolution email for complaint ID ${complaintId}:`, err.message);
+  }
 }
 
 class ComplaintRepository {
@@ -224,7 +222,11 @@ class ComplaintRepository {
         `);
 
       // Trigger automated escalation email to Warehouse Manager (guarded persistently)
-      triggerEscalationEmail(comp.id);
+      try {
+        await triggerEscalationEmail(comp.id);
+      } catch (e) {
+        // Safe swallow on individual email error so loop continues for other expired complaints
+      }
     }
 
     return expiredRes.recordset.length;
@@ -457,9 +459,9 @@ class ComplaintRepository {
 
     // 4. Trigger automated email notifications (non-blocking)
     if (newStatus === 'Escalated to Manager') {
-      triggerEscalationEmail(comp.id);
+      triggerEscalationEmail(comp.id).catch(e => console.warn('[MAIL WARN] Escalation trigger non-blocking catch:', e.message));
     } else if (newStatus === 'Resolved') {
-      triggerResolutionEmail(comp.id);
+      triggerResolutionEmail(comp.id).catch(e => console.warn('[MAIL WARN] Resolution trigger non-blocking catch:', e.message));
     }
 
     return { id: comp.complaint_number, status: newStatus };

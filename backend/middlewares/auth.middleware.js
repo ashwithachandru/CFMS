@@ -17,12 +17,15 @@ module.exports = (req, res, next) => {
     req.user = decoded; // Contains userId, email, role, department
     next();
   } catch (err) {
-    if (err instanceof jwt.TokenExpiredError) {
+    if (err instanceof AuthError || err.name === 'AuthError') {
+      return next(err);
+    }
+    if (err instanceof jwt.TokenExpiredError || err.name === 'TokenExpiredError') {
       return next(new AuthError('Access token has expired'));
     }
-    if (err instanceof jwt.JsonWebTokenError) {
+    if (err instanceof jwt.JsonWebTokenError || err.name === 'JsonWebTokenError') {
       return next(new AuthError('Access token is invalid'));
     }
-    next(err);
+    return next(new AuthError(err.message || 'Authentication failed'));
   }
 };
