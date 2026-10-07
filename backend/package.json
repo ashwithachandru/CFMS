@@ -12,17 +12,17 @@
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "express": "^4.19.2",
+    "express": "^4.22.3",
     "express-rate-limit": "^7.2.0",
     "express-validator": "^7.0.1",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
-    "morgan": "^1.10.0",
-    "mssql": "^10.0.2",
-    "multer": "^2.2.0",
-    "nodemailer": "^6.9.13",
+    "morgan": "^1.12.1",
+    "mssql": "^12.7.4",
+    "multer": "^2.4.0",
+    "nodemailer": "^10.0.9",
     "tesseract.js": "^7.0.0",
-    "uuid": "^9.0.1"
+    "uuid": "^14.0.2"
   },
   "devDependencies": {
     "nodemon": "^3.1.0",
